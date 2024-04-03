@@ -1,84 +1,20 @@
+use crate::types::{AuthResponse, Credental, DeviceAuthResponse, TokenRequest};
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use std::error::Error;
-use std::fmt::Debug;
 use std::ops::Add;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-#[derive(Debug, Serialize)]
-struct AuthRequest {
-    client_id: String,
-    redirect_uri: String,
-    response_type: String,
-}
-
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct AuthResponse {
-    pub access_token: String,
-    pub token_type: String,
-    pub expires_in: u64,
-}
-
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct Credental {
-    pub token: String,
-    pub expiry: u64,
-}
-
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct DeviceAuthResponse {
-    /// Do not show this to the user. It is used to poll for the token.
-    pub device_code: String,
-    pub user_code: String,
-    pub verification_uri: String,
-    pub verification_uri_complete: String,
-    /// lifetime in seconds for device_code and user_code. Default 900.
-    pub expires_in: u64,
-    /// The interval to poll the token endpoint. Default 5.
-    pub interval: u64,
-}
-
-#[derive(Debug, Serialize)]
-pub struct TokenRequest {
-    pub grant_type: String,
-    pub device_code: String,
-    pub client_id: String,
-}
-
 const AUTH0_CLIENT_ID: &str = "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY";
 
-// pub fn perform_authentication() {
-//     let callback_path = "callback".to_string();
-//     let callback_uri = format!("http://localhost:7272/{}", callback_path);
-
-//     let auth_request = AuthRequest {
-//         client_id: "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY".to_string(),
-//         redirect_uri: callback_uri,
-//         response_type: "token".to_string(),
-//     };
-
-//     let auth_url = "https://parra.auth0.com/authorize?".to_string()
-//         + &form_urlencoded::Serializer::new(String::new())
-//             .append_pair("client_id", &auth_request.client_id)
-//             .append_pair("redirect_uri", &auth_request.redirect_uri)
-//             .append_pair("response_type", &auth_request.response_type)
-//             .append_pair("response_mode", "form_post")
-//             .finish();
-
-//     let auth_response: AuthResponse =
-//         open_url_and_wait_for_callback(&auth_url, callback_path);
-
-//     println!("Auth response: {:?}", auth_response);
-// }
-
-pub async fn perform_device_authentication() -> Result<(), Box<dyn Error>> {
+pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>>
+{
     println!("Performing device authentication with Parra API.");
 
     match get_persisted_credentials() {
-        Ok(_creds) => {
+        Ok(creds) => {
             println!("Using existing credentials.");
 
-            return Ok(());
+            return Ok(creds);
         }
         Err(_) => {
             println!("No existing credentials found. Renewing...");
@@ -131,11 +67,11 @@ pub async fn perform_device_authentication() -> Result<(), Box<dyn Error>> {
     )
     .await?;
 
-    persist_credentials_struct(&poll_result)?;
+    let stored = persist_credentials_struct(&poll_result)?;
 
     println!("Authentication successful!");
 
-    Ok(())
+    Ok(stored)
 }
 
 fn get_persisted_credentials() -> Result<Credental, Box<dyn Error>> {
@@ -158,7 +94,7 @@ fn get_persisted_credentials() -> Result<Credental, Box<dyn Error>> {
 
 fn persist_credentials_struct(
     data: &AuthResponse,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<Credental, Box<dyn Error>> {
     let now = SystemTime::now();
     let mut expiry = now.duration_since(UNIX_EPOCH)?;
     expiry = expiry.add(Duration::from_secs(data.expires_in));
@@ -176,7 +112,7 @@ fn persist_credentials_struct(
         serialized.as_bytes(),
     )?;
 
-    Ok(())
+    Ok(credential)
 }
 
 async fn post_form_request<T: DeserializeOwned>(

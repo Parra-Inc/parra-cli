@@ -1,6 +1,6 @@
+mod api;
 mod arg_parser;
 mod auth;
-mod auth_server;
 mod dependencies;
 mod project_generator;
 mod types;
@@ -70,38 +70,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // auth::perform_authentication()
-    auth::perform_device_authentication().await?;
+    api::getTenants().await?;
 
     Ok(())
-
-    // let (auth_server_handle, auth_response): (
-    //     Option<JoinHandle<()>>,
-    //     types::AuthResponse,
-    // ) = if requires_auth {
-    //     println!("+++++++ 4");
-    //     let handle = auth::authenticate_user_async(
-    //         tx_auth,
-    //         args.application_id.clone(),
-    //         args.project_name.clone(),
-    //         args.tenant_id.clone(),
-    //     );
-    //     let auth_info = rx_auth.recv().unwrap();
-
-    //     (Some(handle), auth_info)
-    // } else {
-    //     println!("+++++++ 5");
-    //     (
-    //         None,
-    //         types::AuthResponse {
-    //             application_id: args.application_id.unwrap(),
-    //             application_name: args.project_name.unwrap(),
-    //             tenant_id: args.tenant_id.unwrap(),
-    //         },
-    //     )
-    // };
-
-    // println!("+++++++ 6");
 
     // let auth_info = types::AuthInfo {
     //     application_id: auth_response.application_id,
