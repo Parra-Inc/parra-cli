@@ -2,7 +2,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Debug;
-use std::time::{Duration, Instant};
+use std::ops::Add;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize)]
 struct AuthRequest {
@@ -16,6 +17,12 @@ pub struct AuthResponse {
     pub access_token: String,
     pub token_type: String,
     pub expires_in: u64,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct Credental {
+    pub token: String,
+    pub expiry: u64,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
@@ -66,6 +73,17 @@ const AUTH0_CLIENT_ID: &str = "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY";
 
 pub async fn perform_device_authentication() -> Result<(), Box<dyn Error>> {
     println!("Performing device authentication with Parra API.");
+
+    match get_persisted_credentials() {
+        Ok(_creds) => {
+            println!("Using existing credentials.");
+
+            return Ok(());
+        }
+        Err(_) => {
+            println!("No existing credentials found. Renewing...");
+        }
+    }
 
     let device_code_url = "https://parra.auth0.com/oauth/device/code";
 
@@ -120,33 +138,43 @@ pub async fn perform_device_authentication() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn get_persisted_credentials() -> Result<Credental, Box<dyn Error>> {
+    let data = security_framework::passwords::get_generic_password(
+        "parra_cli",
+        AUTH0_CLIENT_ID,
+    )?;
+
+    let data = String::from_utf8(data)?;
+    let credential = serde_json::from_str::<Credental>(&data)?;
+
+    let now = SystemTime::now();
+
+    if now.duration_since(UNIX_EPOCH)?.as_secs() > credential.expiry {
+        return Err("Token has expired".into());
+    }
+
+    Ok(credential)
+}
+
 fn persist_credentials_struct(
     data: &AuthResponse,
 ) -> Result<(), Box<dyn Error>> {
-    let serialized = serde_json::to_string(data).unwrap();
+    let now = SystemTime::now();
+    let mut expiry = now.duration_since(UNIX_EPOCH)?;
+    expiry = expiry.add(Duration::from_secs(data.expires_in));
 
-    let existing = security_framework::passwords::get_generic_password(
-        "parra_cli",
-        AUTH0_CLIENT_ID,
-    );
+    let credential = Credental {
+        token: data.access_token.clone(),
+        expiry: expiry.as_secs(),
+    };
+
+    let serialized = serde_json::to_string(&credential).unwrap();
 
     security_framework::passwords::set_generic_password(
         "parra_cli",
         AUTH0_CLIENT_ID,
         serialized.as_bytes(),
     )?;
-
-    // if existing.is_ok() {
-    //     // let mut entry = Entry::for_item(existing.unwrap());
-    //     // entry.set_password(&serialized)?;
-    // } else {
-    //     // let mut entry = Entry::new("parra_cli", AUTH0_CLIENT_ID)?;
-    //     // entry.set_password(&serialized)?;
-    // }
-
-    // let entry = Entry::new("parra_cli", "auth")?;
-
-    // entry.entry.set_password(&serialized)?;
 
     Ok(())
 }
