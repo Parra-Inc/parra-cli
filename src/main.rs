@@ -39,11 +39,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         mpsc::channel::<Vec<dependencies::DerivedDependency>>();
     // let (tx_auth, rx_auth) = mpsc::channel::<types::AuthResponse>();
 
-    println!("+++++++ 1");
     if requires_dependencies {
-        println!("+++++++ 2");
-        println!("Missing dependencies: {:?} ", missing);
-
         if missing.contains(&dependencies::DerivedDependency::Xcode) {
             print!("We need to install a few dependencies, including an Xcode update. You will be prompted to enter your Apple ID and password in order to download it. Proceed? (y/n): ");
         } else {
@@ -73,10 +69,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             exit(1)
         }
     }
-    println!("+++++++ 3");
 
     // auth::perform_authentication()
-    auth::perform_device_authentication().await;
+    auth::perform_device_authentication().await?;
 
     Ok(())
 

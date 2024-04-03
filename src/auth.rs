@@ -1,12 +1,7 @@
-use keyring::Entry;
-use rouille::{Response, ResponseBody};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fmt::Debug;
-use std::io::Read;
-use std::sync::mpsc;
-use std::thread;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize)]
@@ -25,24 +20,25 @@ pub struct AuthResponse {
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct DeviceAuthResponse {
+    /// Do not show this to the user. It is used to poll for the token.
     pub device_code: String,
     pub user_code: String,
     pub verification_uri: String,
     pub verification_uri_complete: String,
-    /// lifetime in seconds for device_code and user_code
+    /// lifetime in seconds for device_code and user_code. Default 900.
     pub expires_in: u64,
-    /// The interval to poll the token endpoint
+    /// The interval to poll the token endpoint. Default 5.
     pub interval: u64,
 }
 
 #[derive(Debug, Serialize)]
 pub struct TokenRequest {
-    // pub grant_type: String,
-    // pub client_id: String,
+    pub grant_type: String,
+    pub device_code: String,
+    pub client_id: String,
 }
 
-#[derive(Debug, Deserialize, Clone, Serialize)]
-pub struct TokenResponse {}
+const AUTH0_CLIENT_ID: &str = "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY";
 
 // pub fn perform_authentication() {
 //     let callback_path = "callback".to_string();
@@ -68,31 +64,24 @@ pub struct TokenResponse {}
 //     println!("Auth response: {:?}", auth_response);
 // }
 
-pub async fn perform_device_authentication() {
+pub async fn perform_device_authentication() -> Result<(), Box<dyn Error>> {
+    println!("Performing device authentication with Parra API.");
+
     let device_code_url = "https://parra.auth0.com/oauth/device/code";
 
     let device_auth_response: Result<DeviceAuthResponse, Box<dyn Error>> =
         post_form_request(
             device_code_url,
             vec![
-                (
-                    "client_id".to_string(),
-                    "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY".to_string(),
-                ),
+                ("client_id".to_string(), AUTH0_CLIENT_ID.to_string()),
                 // ("scope".to_string(), "openid profile email".to_string()),
             ],
         )
         .await;
 
     println!("Device auth response: {:?}", device_auth_response);
-    // device_code: "OqIJekqwmzBgGkSXHPZQDeuZ",
-    // user_code: "DBPZ-TSGF",
-    // verification_uri: "https://parra.auth0.com/activate",
-    // verification_uri_complete: "https://parra.auth0.com/activate?user_code=DBPZ-TSGF",
-    // expires_in: 900,
-    // interval: 5
-    let device_auth = device_auth_response.unwrap();
 
+    let device_auth = device_auth_response.unwrap();
     let result = open::that(device_auth.verification_uri_complete);
 
     if result.is_err() {
@@ -107,109 +96,59 @@ pub async fn perform_device_authentication() {
     let token_url = "https://parra.auth0.com/oauth/token";
 
     let token_request_body = TokenRequest {
-        // client_id: "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY".to_string(),
-        // device_code: device_auth.device_code,
-        // grant_type: "urn:ietf:params:oauth:grant-type:device_code".to_string(),
+        client_id: AUTH0_CLIENT_ID.to_string(),
+        device_code: device_auth.device_code,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code".to_string(),
     };
 
-    let poll_result: TokenResponse = poll_for_token(
+    // Strictly speaking, the polling should begin before the user is prompted. But since
+    // we don't have a UI that requires user interaction to launch the browser, and we
+    // aren't awaiting the result of that web page being opened, we can launch it, then
+    // begin polling.
+    let poll_result = poll_for_token::<AuthResponse>(
         token_url,
         device_auth.interval,
         device_auth.expires_in,
         token_request_body,
     )
-    .await
-    .unwrap();
-}
+    .await?;
 
-fn store_struct(
-    service: &str,
-    account: &str,
-    data: &AuthResponse,
-) -> keyring::Result<()> {
-    let serialized = serde_json::to_string(data).unwrap();
+    persist_credentials_struct(&poll_result)?;
 
-    // let keyring = keyring::Entry::new(service, account);
-
-    // keyring.set_password(&serialized)?;
-
-    let entry = Entry::new("parra_cli", "auth")?;
-    entry.set_password(&serialized)?;
+    println!("Authentication successful!");
 
     Ok(())
 }
 
-fn open_url_and_wait_for_callback<
-    T: DeserializeOwned + Clone + Debug + Send + 'static,
->(
-    url: &str,
-    expected_route: String,
-) -> T {
-    let (tx, rx) = mpsc::channel::<T>();
+fn persist_credentials_struct(
+    data: &AuthResponse,
+) -> Result<(), Box<dyn Error>> {
+    let serialized = serde_json::to_string(data).unwrap();
 
-    let result = open::that(url);
+    let existing = security_framework::passwords::get_generic_password(
+        "parra_cli",
+        AUTH0_CLIENT_ID,
+    );
 
-    if result.is_err() {
-        println!("Failed to open the browser. Please visit {}", url);
-    }
+    security_framework::passwords::set_generic_password(
+        "parra_cli",
+        AUTH0_CLIENT_ID,
+        serialized.as_bytes(),
+    )?;
 
-    thread::spawn(move || {
-        rouille::start_server("localhost:7272", move |request| {
-            let method = request.method();
-            let url = request.url();
+    // if existing.is_ok() {
+    //     // let mut entry = Entry::for_item(existing.unwrap());
+    //     // entry.set_password(&serialized)?;
+    // } else {
+    //     // let mut entry = Entry::new("parra_cli", AUTH0_CLIENT_ID)?;
+    //     // entry.set_password(&serialized)?;
+    // }
 
-            if url != format!("/{}", expected_route) {
-                eprintln!("404: {} {}", method, url);
-                return Response::empty_404();
-            }
+    // let entry = Entry::new("parra_cli", "auth")?;
 
-            if !method.eq_ignore_ascii_case("post") {
-                eprintln!("405: {} {}", method, url);
+    // entry.entry.set_password(&serialized)?;
 
-                return Response {
-                    status_code: 405,
-                    headers: vec![],
-                    data: ResponseBody::empty(),
-                    upgrade: None,
-                };
-            };
-
-            println!("Request: {:?}", request);
-
-            let mut body = String::new();
-
-            // Attempt to read the request body directly into the String
-            if let Some(mut data) = request.data() {
-                match data.read_to_string(&mut body) {
-                    Ok(_) => {
-                        // Parse the URL-encoded string
-                        match serde_urlencoded::from_str::<T>(&body) {
-                            Ok(form) => {
-                                println!("Parsed form data: {:?}", form);
-                                Response::text("Parra login successful! You can close this window and return to the terminal.")
-                                    .with_status_code(200)
-                            }
-                            Err(e) => {
-                                eprintln!("Failed to parse form data: {}", e);
-                                Response::text("Failed to parse form data")
-                                    .with_status_code(400)
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to read request body: {}", e);
-                        return Response::text("Failed to read request data")
-                            .with_status_code(400);
-                    }
-                }
-            } else {
-                return Response::text("Failed to access request data")
-                    .with_status_code(400);
-            }
-        });
-    });
-
-    return rx.recv().unwrap();
+    Ok(())
 }
 
 async fn post_form_request<T: DeserializeOwned>(
@@ -246,8 +185,6 @@ async fn poll_for_token<T: DeserializeOwned>(
         // spec says to wait for the interval before the first poll
         async_std::task::sleep(interval).await;
 
-        println!("Polling for token...");
-
         if start_time.elapsed() >= expires_in {
             eprintln!("Time expired.");
 
@@ -260,8 +197,14 @@ async fn poll_for_token<T: DeserializeOwned>(
 
         if status.is_success() {
             return Ok(serde_json::from_str::<T>(&body)?);
+        } else if status.as_u16() == 403 {
+            println!("Waiting for user to confirm login...");
         } else {
-            eprintln!("Request failed with status {}: {}", status, body);
+            eprintln!(
+                "Check for authorization token failed unexpectedly {}: {}",
+                status, body
+            );
+
             return Err("Request failed".into());
         }
     }
