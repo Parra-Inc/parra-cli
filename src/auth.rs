@@ -1,4 +1,6 @@
-use crate::types::{AuthResponse, Credental, DeviceAuthResponse, TokenRequest};
+use crate::types::auth::{
+    AuthResponse, Credental, DeviceAuthResponse, TokenRequest,
+};
 use serde::de::DeserializeOwned;
 use std::error::Error;
 use std::ops::Add;
@@ -6,22 +8,41 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const AUTH0_CLIENT_ID: &str = "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY";
 
+// TODO:
+// 2. Handle refresh tokens
+
 pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>>
 {
     println!("Performing device authentication with Parra API.");
 
-    match get_persisted_credentials() {
-        Ok(creds) => {
-            println!("Using existing credentials.");
+    match get_persisted_credential() {
+        Ok(credential) => {
+            let now = SystemTime::now();
+            let timestamp = now.duration_since(UNIX_EPOCH)?.as_secs();
 
-            return Ok(creds);
+            if timestamp > credential.expiry {
+                println!("Authentication token has expired. Renewing...");
+
+                return perform_normal_authentication().await;
+            } else if timestamp > credential.expiry - 30 {
+                // token is within 30 seconds of expiring... refresh it.
+                return Err("Unimplemented".into()); // TODO: this
+            } else {
+                println!("Using existing credential.");
+
+                return Ok(credential);
+            }
         }
         Err(_) => {
-            println!("No existing credentials found. Renewing...");
+            println!("No existing credential found. Renewing...");
+
+            return perform_normal_authentication().await;
         }
     }
+}
 
-    let device_code_url = "https://parra.auth0.com/oauth/device/code";
+async fn perform_normal_authentication() -> Result<Credental, Box<dyn Error>> {
+    let device_code_url = "https://auth.parra.io/oauth/device/code";
 
     let device_auth_response: Result<DeviceAuthResponse, Box<dyn Error>> =
         post_form_request(
@@ -32,8 +53,6 @@ pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>
             ],
         )
         .await;
-
-    println!("Device auth response: {:?}", device_auth_response);
 
     let device_auth = device_auth_response.unwrap();
     let result = open::that(device_auth.verification_uri_complete);
@@ -47,7 +66,7 @@ pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>
     }
 
     // begin polling for the token
-    let token_url = "https://parra.auth0.com/oauth/token";
+    let token_url = "https://auth.parra.io/oauth/token";
 
     let token_request_body = TokenRequest {
         client_id: AUTH0_CLIENT_ID.to_string(),
@@ -67,32 +86,25 @@ pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>
     )
     .await?;
 
-    let stored = persist_credentials_struct(&poll_result)?;
+    let stored = persist_credential(&poll_result)?;
 
     println!("Authentication successful!");
 
     Ok(stored)
 }
 
-fn get_persisted_credentials() -> Result<Credental, Box<dyn Error>> {
+fn get_persisted_credential() -> Result<Credental, Box<dyn Error>> {
     let data = security_framework::passwords::get_generic_password(
         "parra_cli",
         AUTH0_CLIENT_ID,
     )?;
 
     let data = String::from_utf8(data)?;
-    let credential = serde_json::from_str::<Credental>(&data)?;
 
-    let now = SystemTime::now();
-
-    if now.duration_since(UNIX_EPOCH)?.as_secs() > credential.expiry {
-        return Err("Token has expired".into());
-    }
-
-    Ok(credential)
+    return Ok(serde_json::from_str::<Credental>(&data)?);
 }
 
-fn persist_credentials_struct(
+fn persist_credential(
     data: &AuthResponse,
 ) -> Result<Credental, Box<dyn Error>> {
     let now = SystemTime::now();

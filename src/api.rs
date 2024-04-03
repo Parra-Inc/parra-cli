@@ -1,50 +1,146 @@
+use crate::{
+    auth,
+    types::{
+        api::{
+            ApplicationCollectionResponse, ApplicationRequest,
+            ApplicationResponse, ApplicationType, AuthorizedUser,
+            TenantRequest, TenantResponse, UserInfoResponse,
+        },
+        auth::Credental,
+    },
+};
+use serde::{de::DeserializeOwned, Serialize};
 use std::error::Error;
 
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+pub async fn get_tenants() -> Result<Vec<TenantResponse>, Box<dyn Error>> {
+    // get-tenants-for-user-by-id
 
-use crate::{auth, types::Credental};
+    let authorized_user = ensure_auth().await?;
 
-#[derive(Debug, Deserialize)]
-pub struct Tenant {}
+    let endpoint = format!("/users/{}/tenants", authorized_user.user.id);
+    let tenants: Vec<TenantResponse> =
+        perform_get_request(&authorized_user.credential, &endpoint, vec![])
+            .await?;
 
-pub async fn getTenants() -> Result<Vec<Tenant>, Box<dyn Error>> {
-    let credential = ensure_auth().await?;
-
-    // let tenants: Vec<Tenant> =
-    //     get_request("https://api.parra.io/tenants").await?;
-
-    // for tenant in tenants {
-    //     println!("Tenant: {}", tenant.name);
-    // }
-
-    Ok(vec![])
+    Ok(tenants)
 }
 
-async fn ensure_auth() -> Result<Credental, Box<dyn Error>> {
-    return auth::perform_device_authentication().await;
+pub async fn create_tenant(
+    name: &str,
+) -> Result<TenantResponse, Box<dyn Error>> {
+    // create-tenant-for-user-by-id
+    let authorized_user = ensure_auth().await?;
+
+    let endpoint = format!("/users/{}/tenants", authorized_user.user.id);
+    let body = TenantRequest {
+        name: name.to_string(),
+        is_test: false,
+    };
+
+    let response: TenantResponse = perform_request_with_body(
+        &authorized_user.credential,
+        &endpoint,
+        reqwest::Method::POST,
+        body,
+    )
+    .await?;
+
+    Ok(response)
 }
 
-async fn perform_request<T: DeserializeOwned, U: Serialize>(
+pub async fn paginate_applications(
+    tenant_id: &str,
+) -> Result<Vec<ApplicationResponse>, Box<dyn Error>> {
+    // paginate-applications-for-tenant-by-id
+
+    let authorized_user = ensure_auth().await?;
+    let query = vec![("$top", "10000")];
+
+    let endpoint = format!("/tenants/{}/applications", tenant_id);
+    let response: ApplicationCollectionResponse =
+        perform_get_request(&authorized_user.credential, &endpoint, query)
+            .await?;
+    let applications = response.data;
+
+    Ok(applications)
+}
+
+pub async fn create_application(
+    tenant_id: &str,
+    name: &str,
+) -> Result<ApplicationResponse, Box<dyn Error>> {
+    // create-application-for-tenant-by-id
+
+    let authorized_user = ensure_auth().await?;
+
+    let endpoint = format!("/tenants/{}/applications", tenant_id);
+    let body = ApplicationRequest {
+        name: name.to_string(),
+        description: None,
+        r#type: ApplicationType::Ios,
+    };
+
+    let response: ApplicationResponse = perform_request_with_body(
+        &authorized_user.credential,
+        &endpoint,
+        reqwest::Method::POST,
+        body,
+    )
+    .await?;
+
+    Ok(response)
+}
+
+async fn ensure_auth() -> Result<AuthorizedUser, Box<dyn Error>> {
+    let credential = auth::perform_device_authentication().await?;
+
+    let response: UserInfoResponse =
+        perform_get_request(&credential, "/user-info", vec![]).await?;
+
+    Ok(AuthorizedUser {
+        credential,
+        user: response.user,
+    })
+}
+
+async fn perform_get_request<T: DeserializeOwned>(
     credential: &Credental,
     endpoint: &str,
-    method: reqwest::Method,
-    body: Option<U>,
+    query: Vec<(&str, &str)>,
 ) -> Result<T, Box<dyn Error>> {
     let url = format!("https://api.parra.io/v1{}", endpoint);
     let client = reqwest::Client::new();
-    let mut request = client.request(method, url).bearer_auth(credential.token);
+    let token = &credential.token;
 
-    if let Some(body) = body {
-        if method != reqwest::Method::GET {
-            request = request.json(&body);
-        }
+    let request = client
+        .request(reqwest::Method::GET, url)
+        .query(&query)
+        .bearer_auth(token);
+
+    let response = request.send().await?;
+    let body = response.text().await?;
+
+    Ok(serde_json::from_str::<T>(&body)?)
+}
+
+async fn perform_request_with_body<T: DeserializeOwned, U: Serialize>(
+    credential: &Credental,
+    endpoint: &str,
+    method: reqwest::Method,
+    body: U,
+) -> Result<T, Box<dyn Error>> {
+    let url = format!("https://api.parra.io/v1{}", endpoint);
+    let client = reqwest::Client::new();
+    let token = &credential.token;
+
+    let mut request = client.request(method.clone(), url).bearer_auth(token);
+
+    if method != reqwest::Method::GET {
+        request = request.json(&body);
     }
 
     let response = request.send().await?;
+    let body = response.text().await?;
 
-    if response.status().is_success() {
-        Ok(response.text()?)
-    } else {
-        Err("Request failed".into())
-    }
+    Ok(serde_json::from_str::<T>(&body)?)
 }

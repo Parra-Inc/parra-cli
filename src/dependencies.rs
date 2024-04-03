@@ -1,8 +1,7 @@
-use crate::types::XcodeVersion;
-use indicatif::{ProgressBar, ProgressStyle};
+use crate::types::dependency::XcodeVersion;
 use semver::{Version, VersionReq};
 use std::process::Stdio;
-use std::{process::Command, sync::mpsc::Sender, thread};
+use std::{process::Command, sync::mpsc::Sender};
 
 #[derive(Debug, PartialEq)]
 pub enum DerivedDependency {
@@ -23,16 +22,6 @@ pub fn install_missing_dependencies(
     tx: Sender<Vec<DerivedDependency>>,
     desired_xcode_version: XcodeVersion,
 ) {
-    // Create a new progress bar with a specified length
-    // let bar = ProgressBar::new(100);
-
-    // bar.set_style(
-    //     ProgressStyle::with_template(
-    //         "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-    //     )
-    //     .unwrap()
-    //     .progress_chars("##-"),
-    // );
     install_xcode(desired_xcode_version);
 
     let _ = tx.send(Vec::<DerivedDependency>::new());
