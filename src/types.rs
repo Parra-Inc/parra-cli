@@ -1,11 +1,11 @@
 use std::fmt;
 
-#[derive(Debug)]
-pub struct AuthResponse {
-    pub application_id: String,
-    pub application_name: String,
-    pub tenant_id: String,
-}
+// #[derive(Debug)]
+// pub struct AuthResponse {
+//     pub application_id: String,
+//     pub application_name: String,
+//     pub tenant_id: String,
+// }
 
 #[derive(Debug)]
 pub struct AuthInfo {

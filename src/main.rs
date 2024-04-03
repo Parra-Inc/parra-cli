@@ -4,12 +4,13 @@ mod auth_server;
 mod dependencies;
 mod project_generator;
 mod types;
+use std::error::Error;
 use std::io::{self, Write};
 use std::process::exit;
 use std::sync::mpsc;
-use std::thread::JoinHandle;
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let args = arg_parser::parse_args();
 
     let has_application_id = args.application_id.is_some();
@@ -36,7 +37,7 @@ fn main() {
 
     let (tx_deps, rx_deps) =
         mpsc::channel::<Vec<dependencies::DerivedDependency>>();
-    let (tx_auth, rx_auth) = mpsc::channel::<types::AuthResponse>();
+    // let (tx_auth, rx_auth) = mpsc::channel::<types::AuthResponse>();
 
     println!("+++++++ 1");
     if requires_dependencies {
@@ -74,46 +75,51 @@ fn main() {
     }
     println!("+++++++ 3");
 
-    let (auth_server_handle, auth_response): (
-        Option<JoinHandle<()>>,
-        types::AuthResponse,
-    ) = if requires_auth {
-        println!("+++++++ 4");
-        let handle = auth::authenticate_user_async(
-            tx_auth,
-            args.application_id.clone(),
-            args.project_name.clone(),
-            args.tenant_id.clone(),
-        );
-        let auth_info = rx_auth.recv().unwrap();
+    // auth::perform_authentication()
+    auth::perform_device_authentication().await;
 
-        (Some(handle), auth_info)
-    } else {
-        println!("+++++++ 5");
-        (
-            None,
-            types::AuthResponse {
-                application_id: args.application_id.unwrap(),
-                application_name: args.project_name.unwrap(),
-                tenant_id: args.tenant_id.unwrap(),
-            },
-        )
-    };
+    Ok(())
 
-    println!("+++++++ 6");
+    // let (auth_server_handle, auth_response): (
+    //     Option<JoinHandle<()>>,
+    //     types::AuthResponse,
+    // ) = if requires_auth {
+    //     println!("+++++++ 4");
+    //     let handle = auth::authenticate_user_async(
+    //         tx_auth,
+    //         args.application_id.clone(),
+    //         args.project_name.clone(),
+    //         args.tenant_id.clone(),
+    //     );
+    //     let auth_info = rx_auth.recv().unwrap();
 
-    let auth_info = types::AuthInfo {
-        application_id: auth_response.application_id,
-        tenant_id: auth_response.tenant_id,
-    };
+    //     (Some(handle), auth_info)
+    // } else {
+    //     println!("+++++++ 5");
+    //     (
+    //         None,
+    //         types::AuthResponse {
+    //             application_id: args.application_id.unwrap(),
+    //             application_name: args.project_name.unwrap(),
+    //             tenant_id: args.tenant_id.unwrap(),
+    //         },
+    //     )
+    // };
 
-    let project_info = types::ProjectInfo {
-        name: auth_response.application_name,
-        path: args.project_path.unwrap(),
-    };
+    // println!("+++++++ 6");
 
-    println!("+++++++ 7");
-    // Generate project.
-    // Name and path?
-    project_generator::generate_xcode_project(auth_info, project_info);
+    // let auth_info = types::AuthInfo {
+    //     application_id: auth_response.application_id,
+    //     tenant_id: auth_response.tenant_id,
+    // };
+
+    // let project_info = types::ProjectInfo {
+    //     name: auth_response.application_name,
+    //     path: args.project_path.unwrap(),
+    // };
+
+    // println!("+++++++ 7");
+    // // Generate project.
+    // // Name and path?
+    // project_generator::generate_xcode_project(auth_info, project_info);
 }
