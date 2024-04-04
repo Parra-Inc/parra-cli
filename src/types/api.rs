@@ -45,8 +45,13 @@ pub struct ApplicationRequest {
     pub r#type: ApplicationType,
     /// This is currently only required when `type` is `ios`. But since that's the only type
     /// we support right now, we're making it required here.
-    pub bundle_id: String,
+    pub ios_bundle_id: String,
     pub is_new_project: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ApplicationIosConfig {
+    pub bundle_id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -57,7 +62,7 @@ pub struct ApplicationResponse {
     pub r#type: ApplicationType,
     pub tenant_id: String,
     /// Will always be present when `type` is `ios`.
-    pub bundle_id: Option<String>,
+    pub ios: Option<ApplicationIosConfig>,
 }
 
 #[derive(Debug, Deserialize)]

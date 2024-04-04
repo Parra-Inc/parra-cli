@@ -4,7 +4,7 @@ mod auth;
 mod dependencies;
 mod project_generator;
 mod types;
-use inquire::validator::{MinLengthValidator, Validation};
+use inquire::validator::{MaxLengthValidator, MinLengthValidator, Validation};
 use inquire::{Confirm, InquireError, Select, Text};
 use regex::Regex;
 use slugify::slugify;
@@ -28,8 +28,8 @@ impl Display for TenantResponse {
 
 impl Display for ApplicationResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if let Some(bundle_id) = &self.bundle_id {
-            write!(f, "{} ({})", self.name, bundle_id)
+        if let Some(ios) = &self.ios {
+            write!(f, "{} ({})", self.name, ios.bundle_id)
         } else {
             write!(f, "{}", self.name)
         }
@@ -228,6 +228,7 @@ async fn create_new_application(
     let bundle_id = Text::new("What would you like your bundle ID to be?")
         .with_default(&suggested_bundle_id)
         .with_validator(MinLengthValidator::new(5)) // min for x.y.z
+        .with_validator(MaxLengthValidator::new(155))
         .with_validator(|input: &str| {
             let re =
                 Regex::new(r"^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+){2,}$").unwrap();

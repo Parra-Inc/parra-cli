@@ -111,7 +111,7 @@ pub async fn create_application(
         name: name.to_string(),
         description: None,
         r#type: ApplicationType::Ios,
-        bundle_id: bundle_id.to_string(),
+        ios_bundle_id: bundle_id.to_string(),
         is_new_project: true,
     };
 
