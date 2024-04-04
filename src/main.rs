@@ -4,7 +4,7 @@ mod auth;
 mod dependencies;
 mod project_generator;
 mod types;
-use inquire::{InquireError, Select, Text};
+use inquire::{Confirm, InquireError, Select, Text};
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
@@ -115,23 +115,23 @@ async fn get_tenant_id(
     let tenants = api::get_tenants().await?;
 
     if tenants.is_empty() {
-        let name = Text::new("No existing tenants found. What would you like to call your tenant?").prompt()?;
-
-        let new_tenant = api::create_tenant(&name).await;
-
-        return Ok(new_tenant?.id);
+        return create_new_tenant().await;
     }
 
-    // If there is only one tenant, use it.
-    if tenants.len() == 1 {
-        return Ok(tenants[0].id.clone());
+    let use_existing =
+        Confirm::new("Would you like to use an existing tenant?")
+            .with_default(true)
+            .prompt()?;
+
+    if use_existing {
+        let selected_tenant: Result<TenantResponse, InquireError> =
+            Select::new("Which tenant are you building an app for?", tenants)
+                .prompt();
+
+        return Ok(selected_tenant?.id);
+    } else {
+        return create_new_tenant().await;
     }
-
-    let selected_tenant: Result<TenantResponse, InquireError> =
-        Select::new("Which tenant are you building an app for?", tenants)
-            .prompt();
-
-    Ok(selected_tenant?.id)
 }
 
 async fn get_application_id(
@@ -146,24 +146,46 @@ async fn get_application_id(
     let applications = api::paginate_applications(tenant_id).await?;
 
     if applications.is_empty() {
-        let name = Text::new("No existing applications found. What would you like to call your application?").prompt()?;
-
-        let new_application = api::create_application(tenant_id, &name).await;
-
-        return Ok(new_application?.id);
+        return create_new_application(tenant_id).await;
     }
 
-    // If there is only one application, use it.
-    if applications.len() == 1 {
-        return Ok(applications[0].id.clone());
+    let use_existing = Confirm::new("Would you like to use an existing application?")
+        .with_default(true)
+        .with_help_message("We found existing applications that you can use. If you choose not to use them, a new application will be created.")
+        .prompt()?;
+
+    if use_existing {
+        let selected_application: Result<ApplicationResponse, InquireError> =
+            Select::new(
+                "Which application are you building an app for?",
+                applications,
+            )
+            .prompt();
+
+        Ok(selected_application?.id)
+    } else {
+        return create_new_application(tenant_id).await;
     }
+}
 
-    let selected_application: Result<ApplicationResponse, InquireError> =
-        Select::new(
-            "Which application are you building an app for?",
-            applications,
-        )
-        .prompt();
+async fn create_new_tenant() -> Result<String, Box<dyn Error>> {
+    let name = Text::new(
+        "No existing tenants found. What would you like to call your tenant?",
+    )
+    .prompt()?;
 
-    Ok(selected_application?.id)
+    let new_tenant = api::create_tenant(&name).await;
+
+    return Ok(new_tenant?.id);
+}
+
+async fn create_new_application(
+    tenant_id: &str,
+) -> Result<String, Box<dyn Error>> {
+    let name =
+        Text::new("What would you like to call your application?").prompt()?;
+
+    let new_application = api::create_application(tenant_id, &name).await;
+
+    return Ok(new_application?.id);
 }
