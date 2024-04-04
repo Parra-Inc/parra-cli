@@ -4,7 +4,9 @@ mod auth;
 mod dependencies;
 mod project_generator;
 mod types;
+use inquire::validator::{MinLengthValidator, Validation};
 use inquire::{Confirm, InquireError, Select, Text};
+use regex::Regex;
 use slugify::slugify;
 use std::env;
 use std::error::Error;
@@ -193,6 +195,7 @@ fn get_project_path(project_path_arg: Option<String>) -> String {
     let project_path =
         Text::new("Where would you like to create your project?")
             .with_default("./")
+            .with_validator(MinLengthValidator::new(1))
             .with_help_message("Provide a relative path to the directory where you would like to create your project. A new directory will be created in this location with the name of your application.")
             .prompt()
             .unwrap();
@@ -204,16 +207,18 @@ async fn create_new_tenant() -> Result<TenantResponse, Box<dyn Error>> {
     let name = Text::new(
         "No existing tenants found. What would you like to call your tenant?",
     )
+    .with_validator(MinLengthValidator::new(1))
     .prompt()?;
 
-    return api::create_tenant(&name).await;
+    return api::create_tenant(&name.trim()).await;
 }
 
 async fn create_new_application(
     tenant: &TenantResponse,
 ) -> Result<ApplicationResponse, Box<dyn Error>> {
-    let name =
-        Text::new("What would you like to call your application?").prompt()?;
+    let name = Text::new("What would you like to call your application?")
+        .with_validator(MinLengthValidator::new(1))
+        .prompt()?;
 
     let tenant_slug = slugify!(&tenant.name);
     let app_name_slug = slugify!(&name);
@@ -222,10 +227,22 @@ async fn create_new_application(
 
     let bundle_id = Text::new("What would you like your bundle ID to be?")
         .with_default(&suggested_bundle_id)
+        .with_validator(MinLengthValidator::new(5)) // min for x.y.z
+        .with_validator(|input: &str| {
+            let re =
+                Regex::new(r"^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+){2,}$").unwrap();
+
+            if re.is_match(input) {
+                Ok(Validation::Valid)
+            } else {
+                Ok(Validation::Invalid("The bundle ID string must contain only alphanumeric characters (A–Z, a–z, and 0–9), hyphens (-), and periods (.). Typically, you use a reverse-DNS format for bundle ID strings. Bundle IDs are case-insensitive.".into()))
+            }
+        })
         .prompt()?;
 
     let new_application =
-        api::create_application(&tenant.id, &name, &bundle_id).await?;
+        api::create_application(&tenant.id, &name.trim(), &bundle_id.trim())
+            .await?;
 
     return Ok(new_application);
 }
