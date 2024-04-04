@@ -65,6 +65,23 @@ pub async fn paginate_applications(
     Ok(applications)
 }
 
+pub async fn get_application(
+    tenant_id: &str,
+    application_id: &str,
+) -> Result<ApplicationResponse, Box<dyn Error>> {
+    // get-application-by-id-for-tenant-by-id
+
+    let authorized_user = ensure_auth().await?;
+
+    let endpoint =
+        format!("/tenants/{}/applications/{}", tenant_id, application_id);
+    let response: ApplicationResponse =
+        perform_get_request(&authorized_user.credential, &endpoint, vec![])
+            .await?;
+
+    Ok(response)
+}
+
 pub async fn create_application(
     tenant_id: &str,
     name: &str,

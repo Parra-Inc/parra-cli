@@ -13,29 +13,21 @@ const AUTH0_CLIENT_ID: &str = "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY";
 
 pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>>
 {
-    println!("Performing device authentication with Parra API.");
-
     match get_persisted_credential() {
         Ok(credential) => {
             let now = SystemTime::now();
             let timestamp = now.duration_since(UNIX_EPOCH)?.as_secs();
 
             if timestamp > credential.expiry {
-                println!("Authentication token has expired. Renewing...");
-
                 return perform_normal_authentication().await;
             } else if timestamp > credential.expiry - 30 {
                 // token is within 30 seconds of expiring... refresh it.
                 return Err("Unimplemented".into()); // TODO: this
             } else {
-                println!("Using existing credential.");
-
                 return Ok(credential);
             }
         }
         Err(_) => {
-            println!("No existing credential found. Renewing...");
-
             return perform_normal_authentication().await;
         }
     }
@@ -47,10 +39,7 @@ async fn perform_normal_authentication() -> Result<Credental, Box<dyn Error>> {
     let device_auth_response: Result<DeviceAuthResponse, Box<dyn Error>> =
         post_form_request(
             device_code_url,
-            vec![
-                ("client_id".to_string(), AUTH0_CLIENT_ID.to_string()),
-                // ("scope".to_string(), "openid profile email".to_string()),
-            ],
+            vec![("client_id".to_string(), AUTH0_CLIENT_ID.to_string())],
         )
         .await;
 
@@ -87,8 +76,6 @@ async fn perform_normal_authentication() -> Result<Credental, Box<dyn Error>> {
     .await?;
 
     let stored = persist_credential(&poll_result)?;
-
-    println!("Authentication successful!");
 
     Ok(stored)
 }
@@ -162,8 +149,6 @@ async fn poll_for_token<T: DeserializeOwned>(
         async_std::task::sleep(interval).await;
 
         if start_time.elapsed() >= expires_in {
-            eprintln!("Time expired.");
-
             return Err("Parra sign in request has expired. Try again.".into());
         }
 
@@ -174,7 +159,7 @@ async fn poll_for_token<T: DeserializeOwned>(
         if status.is_success() {
             return Ok(serde_json::from_str::<T>(&body)?);
         } else if status.as_u16() == 403 {
-            println!("Waiting for user to confirm login...");
+            println!("Waiting for authorization from the browser...");
         } else {
             eprintln!(
                 "Check for authorization token failed unexpectedly {}: {}",

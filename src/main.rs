@@ -5,6 +5,7 @@ mod dependencies;
 mod project_generator;
 mod types;
 use inquire::{Confirm, InquireError, Select, Text};
+use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
@@ -12,6 +13,9 @@ use std::process::exit;
 use std::sync::mpsc;
 use types::api::{ApplicationResponse, TenantResponse};
 use types::dependency::XcodeVersion;
+
+use crate::types::auth::AuthInfo;
+use crate::types::project::ProjectInfo;
 
 impl Display for TenantResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -83,25 +87,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     let tenant_id = get_tenant_id(args.tenant_id).await?;
-    let application_id =
-        get_application_id(args.application_id, &tenant_id).await?;
+    let application = get_application(args.application_id, &tenant_id).await?;
+    let relative_path = get_project_path(args.project_path);
 
-    println!("Tenant ID: {}", tenant_id);
-    println!("Application ID: {}", application_id);
+    let auth_info = AuthInfo {
+        application_id: application.id,
+        tenant_id,
+    };
+
+    let current_dir = env::current_dir()?;
+    let project_path = current_dir.join(relative_path);
+
+    let final_path = project_path.to_str().unwrap();
+
+    let project_info = ProjectInfo {
+        name: application.name,
+        path: final_path.to_string(),
+    };
+
+    project_generator::generate_xcode_project(auth_info, project_info);
 
     Ok(())
-
-    // let auth_info = types::AuthInfo {
-    //     application_id: auth_response.application_id,
-    //     tenant_id: auth_response.tenant_id,
-    // };
-
-    // let project_info = types::ProjectInfo {
-    //     name: auth_response.application_name,
-    //     path: args.project_path.unwrap(),
-    // };
-    // // Name and path?
-    // project_generator::generate_xcode_project(auth_info, project_info);
 }
 
 async fn get_tenant_id(
@@ -134,13 +140,13 @@ async fn get_tenant_id(
     }
 }
 
-async fn get_application_id(
+async fn get_application(
     application_arg: Option<String>,
     tenant_id: &str,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<ApplicationResponse, Box<dyn Error>> {
     // The user provided a application ID directly.
     if let Some(application_arg) = application_arg {
-        return Ok(application_arg);
+        return api::get_application(tenant_id, &application_arg).await;
     }
 
     let applications = api::paginate_applications(tenant_id).await?;
@@ -162,10 +168,28 @@ async fn get_application_id(
             )
             .prompt();
 
-        Ok(selected_application?.id)
+        match selected_application {
+            Ok(application) => return Ok(application),
+            Err(error) => Err(error.into()),
+        }
     } else {
         return create_new_application(tenant_id).await;
     }
+}
+
+fn get_project_path(project_path_arg: Option<String>) -> String {
+    if let Some(project_path) = project_path_arg {
+        return project_path;
+    }
+
+    let project_path =
+        Text::new("Where would you like to create your project?")
+            .with_default("./")
+            .with_help_message("Provide a relative path to the directory where you would like to create your project. A new directory will be created in this location with the name of your application.")
+            .prompt()
+            .unwrap();
+
+    return project_path;
 }
 
 async fn create_new_tenant() -> Result<String, Box<dyn Error>> {
@@ -181,11 +205,11 @@ async fn create_new_tenant() -> Result<String, Box<dyn Error>> {
 
 async fn create_new_application(
     tenant_id: &str,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<ApplicationResponse, Box<dyn Error>> {
     let name =
         Text::new("What would you like to call your application?").prompt()?;
 
-    let new_application = api::create_application(tenant_id, &name).await;
+    let new_application = api::create_application(tenant_id, &name).await?;
 
-    return Ok(new_application?.id);
+    return Ok(new_application);
 }
