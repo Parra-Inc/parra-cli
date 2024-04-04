@@ -5,6 +5,7 @@ mod dependencies;
 mod project_generator;
 mod types;
 use inquire::{Confirm, InquireError, Select, Text};
+use slugify::slugify;
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
@@ -25,7 +26,11 @@ impl Display for TenantResponse {
 
 impl Display for ApplicationResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name)
+        if let Some(bundle_id) = &self.bundle_id {
+            write!(f, "{} ({})", self.name, bundle_id)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -86,13 +91,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let tenant_id = get_tenant_id(args.tenant_id).await?;
-    let application = get_application(args.application_id, &tenant_id).await?;
+    let tenant = get_tenant(args.tenant_id).await?;
+    let application = get_application(args.application_id, &tenant).await?;
     let relative_path = get_project_path(args.project_path);
 
     let auth_info = AuthInfo {
         application_id: application.id,
-        tenant_id,
+        tenant_id: tenant.id,
     };
 
     let current_dir = env::current_dir()?;
@@ -105,17 +110,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
         path: final_path.to_string(),
     };
 
-    project_generator::generate_xcode_project(auth_info, project_info);
+    project_generator::generator::generate_xcode_project(
+        auth_info,
+        project_info,
+    );
 
     Ok(())
 }
 
-async fn get_tenant_id(
+async fn get_tenant(
     tenant_arg: Option<String>,
-) -> Result<String, Box<dyn Error>> {
+) -> Result<TenantResponse, Box<dyn Error>> {
     // The user provided a tenant ID directly.
     if let Some(tenant_id) = tenant_arg {
-        return Ok(tenant_id);
+        return api::get_tenant(&tenant_id).await;
     }
 
     let tenants = api::get_tenants().await?;
@@ -134,7 +142,7 @@ async fn get_tenant_id(
             Select::new("Which tenant are you building an app for?", tenants)
                 .prompt();
 
-        return Ok(selected_tenant?.id);
+        return Ok(selected_tenant?);
     } else {
         return create_new_tenant().await;
     }
@@ -142,17 +150,17 @@ async fn get_tenant_id(
 
 async fn get_application(
     application_arg: Option<String>,
-    tenant_id: &str,
+    tenant: &TenantResponse,
 ) -> Result<ApplicationResponse, Box<dyn Error>> {
     // The user provided a application ID directly.
     if let Some(application_arg) = application_arg {
-        return api::get_application(tenant_id, &application_arg).await;
+        return api::get_application(&tenant.id, &application_arg).await;
     }
 
-    let applications = api::paginate_applications(tenant_id).await?;
+    let applications = api::paginate_applications(&tenant.id).await?;
 
     if applications.is_empty() {
-        return create_new_application(tenant_id).await;
+        return create_new_application(&tenant).await;
     }
 
     let use_existing = Confirm::new("Would you like to use an existing application?")
@@ -173,7 +181,7 @@ async fn get_application(
             Err(error) => Err(error.into()),
         }
     } else {
-        return create_new_application(tenant_id).await;
+        return create_new_application(&tenant).await;
     }
 }
 
@@ -192,24 +200,32 @@ fn get_project_path(project_path_arg: Option<String>) -> String {
     return project_path;
 }
 
-async fn create_new_tenant() -> Result<String, Box<dyn Error>> {
+async fn create_new_tenant() -> Result<TenantResponse, Box<dyn Error>> {
     let name = Text::new(
         "No existing tenants found. What would you like to call your tenant?",
     )
     .prompt()?;
 
-    let new_tenant = api::create_tenant(&name).await;
-
-    return Ok(new_tenant?.id);
+    return api::create_tenant(&name).await;
 }
 
 async fn create_new_application(
-    tenant_id: &str,
+    tenant: &TenantResponse,
 ) -> Result<ApplicationResponse, Box<dyn Error>> {
     let name =
         Text::new("What would you like to call your application?").prompt()?;
 
-    let new_application = api::create_application(tenant_id, &name).await?;
+    let tenant_slug = slugify!(&tenant.name);
+    let app_name_slug = slugify!(&name);
+
+    let suggested_bundle_id = format!("com.{}.{}", tenant_slug, app_name_slug);
+
+    let bundle_id = Text::new("What would you like your bundle ID to be?")
+        .with_default(&suggested_bundle_id)
+        .prompt()?;
+
+    let new_application =
+        api::create_application(&tenant.id, &name, &bundle_id).await?;
 
     return Ok(new_application);
 }

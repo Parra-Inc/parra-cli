@@ -12,6 +12,21 @@ use crate::{
 use serde::{de::DeserializeOwned, Serialize};
 use std::error::Error;
 
+pub async fn get_tenant(
+    tenant_id: &str,
+) -> Result<TenantResponse, Box<dyn Error>> {
+    // get-tenant-by-id
+
+    let authorized_user = ensure_auth().await?;
+
+    let endpoint = format!("/tenants/{}", tenant_id);
+    let response: TenantResponse =
+        perform_get_request(&authorized_user.credential, &endpoint, vec![])
+            .await?;
+
+    Ok(response)
+}
+
 pub async fn get_tenants() -> Result<Vec<TenantResponse>, Box<dyn Error>> {
     // get-tenants-for-user-by-id
 
@@ -85,6 +100,7 @@ pub async fn get_application(
 pub async fn create_application(
     tenant_id: &str,
     name: &str,
+    bundle_id: &str,
 ) -> Result<ApplicationResponse, Box<dyn Error>> {
     // create-application-for-tenant-by-id
 
@@ -95,6 +111,8 @@ pub async fn create_application(
         name: name.to_string(),
         description: None,
         r#type: ApplicationType::Ios,
+        bundle_id: bundle_id.to_string(),
+        is_new_project: true,
     };
 
     let response: ApplicationResponse = perform_request_with_body(
@@ -157,6 +175,12 @@ async fn perform_request_with_body<T: DeserializeOwned, U: Serialize>(
     }
 
     let response = request.send().await?;
+
+    if !response.status().is_success() {
+        let body = response.text().await?;
+        return Err(format!("Error: {}", body).into());
+    }
+
     let body = response.text().await?;
 
     Ok(serde_json::from_str::<T>(&body)?)

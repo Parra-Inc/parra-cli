@@ -43,6 +43,10 @@ pub struct ApplicationRequest {
     pub name: String,
     pub description: Option<String>,
     pub r#type: ApplicationType,
+    /// This is currently only required when `type` is `ios`. But since that's the only type
+    /// we support right now, we're making it required here.
+    pub bundle_id: String,
+    pub is_new_project: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +56,8 @@ pub struct ApplicationResponse {
     pub description: Option<String>,
     pub r#type: ApplicationType,
     pub tenant_id: String,
+    /// Will always be present when `type` is `ios`.
+    pub bundle_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
