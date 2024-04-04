@@ -32,7 +32,7 @@ pub struct TenantResponse {
     pub name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum ApplicationType {
     #[serde(rename = "ios")]
     Ios,
@@ -49,12 +49,12 @@ pub struct ApplicationRequest {
     pub is_new_project: bool,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationIosConfig {
     pub bundle_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct ApplicationResponse {
     pub id: String,
     pub name: String,

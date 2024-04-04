@@ -1,11 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
-pub struct AuthInfo {
-    pub application_id: String,
-    pub tenant_id: String,
-}
-
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Credental {
     pub token: String,

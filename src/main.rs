@@ -17,9 +17,6 @@ use std::sync::mpsc;
 use types::api::{ApplicationResponse, TenantResponse};
 use types::dependency::XcodeVersion;
 
-use crate::types::auth::AuthInfo;
-use crate::types::project::ProjectInfo;
-
 impl Display for TenantResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{} ({})", self.name, self.id)
@@ -97,25 +94,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let application = get_application(args.application_id, &tenant).await?;
     let relative_path = get_project_path(args.project_path);
 
-    let auth_info = AuthInfo {
-        application_id: application.id,
-        tenant_id: tenant.id,
-    };
-
     let current_dir = env::current_dir()?;
     let project_path = current_dir.join(relative_path);
 
-    let final_path = project_path.to_str().unwrap();
-
-    let project_info = ProjectInfo {
-        name: application.name,
-        path: final_path.to_string(),
-    };
-
     project_generator::generator::generate_xcode_project(
-        auth_info,
-        project_info,
-    );
+        &project_path,
+        tenant,
+        application,
+    )?;
 
     Ok(())
 }
