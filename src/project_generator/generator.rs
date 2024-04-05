@@ -1,8 +1,9 @@
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{exit, Command};
 use std::{error::Error, fs};
 
 use convert_case::{Case, Casing};
+use inquire::Confirm;
 
 use crate::{
     project_generator::{renderer, templates},
@@ -20,6 +21,22 @@ pub fn generate_xcode_project(
 
     let project_dir = path.join(app_name.clone());
     let target_dir = project_dir.join(app_name.clone());
+
+    if project_dir.exists() {
+        let result =
+            Confirm::new("Project directory already exists. Overwrite?")
+                .with_help_message(
+                    "If you choose not to proceed, the program will exit.",
+                )
+                .with_default(false)
+                .prompt()?;
+
+        if !result {
+            exit(1);
+        }
+
+        fs::remove_dir_all(&project_dir)?;
+    }
 
     create_project_structure(&target_dir)?;
 
