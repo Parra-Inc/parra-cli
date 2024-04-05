@@ -18,17 +18,13 @@ targets:
     platform: iOS
     deploymentTarget: "17.0"
     sources: [{{ app.name }}]
-    sources:
-      - path: Sources
-        includes: 
-          - path/to/your/File.swift
-        name: YourGroupName
-        createIntermediateGroups: true
     info:
       path: {{ app.name }}/Info.plist
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: {{ app.bundle_id }}
+    dependencies:
+      - package: Parra
 
 settings:
   GENERATE_INFOPLIST_FILE: NO
@@ -36,6 +32,12 @@ settings:
   MARKETING_VERSION: 1.0.0
   base:
     CURRENT_PROJECT_VERSION: 1
+
+packages:
+  Parra:
+    url: https://github.com/Parra-Inc/parra-ios-sdk
+    minorVersion: 0.1.3
+
 "#
     .to_string();
 }
