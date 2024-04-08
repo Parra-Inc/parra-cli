@@ -61,22 +61,34 @@ pub fn generate_xcode_project(
     )
     .unwrap();
 
-    run_xcodegen(path, &app_name, &project_yaml)?;
+    run_xcodegen(path, &project_dir, &project_yaml)?;
 
-    println!("Project YAML: {}", project_yaml);
+    install_spm_dependencies(&project_dir)?;
+
+    open_project(&target_dir)?;
 
     Ok(())
 }
 
-pub fn create_project_structure(
+fn create_project_structure(
     target_path: &PathBuf,
 ) -> Result<(), Box<dyn Error>> {
     fs::create_dir_all(target_path)?;
 
+    fs::create_dir_all(target_path.join("Assets.xcassets"))?;
+    fs::create_dir_all(
+        target_path.join("Assets.xcassets/AccentColor.colorset"),
+    )?;
+    fs::create_dir_all(target_path.join("Assets.xcassets/AppIcon.appiconset"))?;
+
+    fs::create_dir_all(
+        target_path.join("Preview Content/Preview Assets.xcassets"),
+    )?;
+
     Ok(())
 }
 
-pub fn create_project_files(
+fn create_project_files(
     target_path: &PathBuf,
     camel_app_name: &str,
     globals: &liquid::Object,
@@ -93,34 +105,106 @@ pub fn create_project_files(
     )
     .unwrap();
 
+    create_asset_catalog(&target_path, &globals)?;
+
+    let preview_assets_json =
+        renderer::render_template(&templates::get_assets_json(), &globals)
+            .unwrap();
+
     let app_path = target_path.join(format!("{}App.swift", camel_app_name));
     let content_view_path = target_path.join("ContentView.swift");
+    let preview_assets_path = target_path
+        .join("Preview Content/Preview Assets.xcassets/Contents.json");
 
     fs::write(app_path, app_swift_yaml)?;
     fs::write(content_view_path, app_content_view_yaml)?;
+    fs::write(preview_assets_path, preview_assets_json)?;
 
     Ok(())
 }
 
-pub fn run_xcodegen(
+fn create_asset_catalog(
+    target_path: &PathBuf,
+    globals: &liquid::Object,
+) -> Result<(), Box<dyn Error>> {
+    let assets_json =
+        renderer::render_template(&templates::get_assets_json(), &globals)
+            .unwrap();
+
+    let accent_color_json = renderer::render_template(
+        &templates::get_accent_color_json(),
+        &globals,
+    )
+    .unwrap();
+
+    let app_icon_json =
+        renderer::render_template(&templates::get_app_icon_json(), &globals)
+            .unwrap();
+
+    let assets_path = target_path.join("Assets.xcassets/Contents.json");
+    let accent_color_path =
+        target_path.join("Assets.xcassets/AccentColor.colorset/Contents.json");
+    let app_icon_path =
+        target_path.join("Assets.xcassets/AppIcon.appiconset/Contents.json");
+
+    fs::write(assets_path, assets_json)?;
+    fs::write(accent_color_path, accent_color_json)?;
+    fs::write(app_icon_path, app_icon_json)?;
+
+    Ok(())
+}
+
+fn run_xcodegen(
     path: &PathBuf,
-    app_name: &str,
+    project_path: &PathBuf,
     template: &str,
 ) -> Result<(), Box<dyn Error>> {
     fs::write(path.join("project.yml"), template)?;
 
-    let output = Command::new("xcodegen")
+    let result = Command::new("xcodegen")
         .arg("--spec")
         .arg(path.join("project.yml"))
         .arg("--project")
-        .arg(app_name)
+        .arg(project_path.to_str().unwrap().to_owned())
         .arg("--project-root")
-        .arg(app_name)
+        .arg(project_path.to_str().unwrap().to_owned())
+        .output();
+
+    match result {
+        Ok(output) => {
+            if output.status.success() {
+                fs::remove_file(path.join("project.yml"))?;
+
+                return Ok(());
+            } else {
+                let error = String::from_utf8_lossy(&output.stderr);
+                eprintln!("Error: {}", error);
+                exit(1);
+            }
+        }
+        Err(error) => {
+            eprintln!("Error: {}", error);
+            exit(1);
+        }
+    }
+}
+
+fn install_spm_dependencies(path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    Command::new("xcodebuild")
+        .arg("-resolvePackageDependencies")
+        .current_dir(path)
         .output()?;
 
-    println!("xcodegen output: {:?}", output);
+    Ok(())
+}
 
-    fs::remove_file(path.join("project.yml"))?;
+fn open_project(path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    let full_path = path.to_str().unwrap().to_owned() + ".xcodeproj";
+
+    Command::new("open")
+        .arg(full_path)
+        .current_dir(path)
+        .output()?;
 
     Ok(())
 }
