@@ -12,6 +12,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::io::{self, Write};
+use std::path::Path;
 use std::process::exit;
 use std::sync::mpsc;
 use types::api::{ApplicationResponse, TenantResponse};
@@ -36,8 +37,6 @@ impl Display for ApplicationResponse {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = arg_parser::parse_args();
-
-    // let has_project_name = args.project_name.is_some();
 
     let min_xcode_version = XcodeVersion {
         major: 15,
@@ -90,12 +89,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    let tenant = get_tenant(args.tenant_id).await?;
+    let tenant = get_tenant(args.workspace_id).await?;
     let application = get_application(args.application_id, &tenant).await?;
     let relative_path = get_project_path(args.project_path);
 
     let current_dir = env::current_dir()?;
-    let project_path = current_dir.join(relative_path);
+    let supplied = Path::new(&relative_path);
+    let project_path = current_dir.join(supplied);
+
+    println!("Creating project at: {:?}", project_path);
 
     project_generator::generator::generate_xcode_project(
         &project_path,
@@ -121,14 +123,17 @@ async fn get_tenant(
     }
 
     let use_existing =
-        Confirm::new("Would you like to use an existing tenant?")
+        Confirm::new("Would you like to use an existing workspace?")
             .with_default(true)
             .prompt()?;
 
     if use_existing {
         let selected_tenant: Result<TenantResponse, InquireError> =
-            Select::new("Which tenant are you building an app for?", tenants)
-                .prompt();
+            Select::new(
+                "Which workspace are you building an app for?",
+                tenants,
+            )
+            .prompt();
 
         return Ok(selected_tenant?);
     } else {
@@ -191,7 +196,7 @@ fn get_project_path(project_path_arg: Option<String>) -> String {
 
 async fn create_new_tenant() -> Result<TenantResponse, Box<dyn Error>> {
     let name = Text::new(
-        "No existing tenants found. What would you like to call your tenant?",
+        "No existing workspaces found. What would you like to call your workspace?",
     )
     .with_validator(MinLengthValidator::new(1))
     .prompt()?;
