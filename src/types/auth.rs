@@ -3,14 +3,26 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct Credental {
     pub token: String,
+    pub refresh_token: String,
     pub expiry: u64,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
 pub struct AuthResponse {
     pub access_token: String,
-    pub token_type: String,
+    pub refresh_token: String,
+    pub scope: String,
     pub expires_in: u64,
+    pub token_type: String,
+}
+
+#[derive(Debug, Deserialize, Clone, Serialize)]
+pub struct RefreshResponse {
+    pub access_token: String,
+    pub scope: String,
+    pub expires_in: u64,
+    pub token_type: String,
+    pub id_token: String,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]

@@ -1,5 +1,5 @@
 use crate::types::auth::{
-    AuthResponse, Credental, DeviceAuthResponse, TokenRequest,
+    AuthResponse, Credental, DeviceAuthResponse, RefreshResponse, TokenRequest,
 };
 use serde::de::DeserializeOwned;
 use std::error::Error;
@@ -8,9 +8,6 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const AUTH0_CLIENT_ID: &str = "nD9GTUvvqCT0oWi34L2IdJiK0YjupSjY";
 
-// TODO:
-// 2. Handle refresh tokens
-
 pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>>
 {
     match get_persisted_credential() {
@@ -18,11 +15,9 @@ pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>
             let now = SystemTime::now();
             let timestamp = now.duration_since(UNIX_EPOCH)?.as_secs();
 
-            if timestamp > credential.expiry {
-                return perform_normal_authentication().await;
-            } else if timestamp > credential.expiry - 30 {
-                // token is within 30 seconds of expiring... refresh it.
-                return Err("Unimplemented".into()); // TODO: this
+            // Token is either already expired or about to expire
+            if timestamp > credential.expiry - 30 {
+                return perform_refresh_authentication(&credential).await;
             } else {
                 return Ok(credential);
             }
@@ -33,13 +28,39 @@ pub async fn perform_device_authentication() -> Result<Credental, Box<dyn Error>
     }
 }
 
+async fn perform_refresh_authentication(
+    credential: &Credental,
+) -> Result<Credental, Box<dyn Error>> {
+    let result: Result<RefreshResponse, Box<dyn Error>> = post_form_request(
+        "https://auth.parra.io/oauth/token",
+        vec![
+            ("client_id".to_string(), AUTH0_CLIENT_ID.to_string()),
+            (
+                "refresh_token".to_string(),
+                credential.refresh_token.to_string(),
+            ),
+            ("grant_type".to_string(), "refresh_token".to_string()),
+        ],
+    )
+    .await;
+
+    let refresh_response = result?;
+
+    println!("Reauthentication successful!");
+
+    return persist_refresh_credential(&refresh_response, &credential);
+}
+
 async fn perform_normal_authentication() -> Result<Credental, Box<dyn Error>> {
     let device_code_url = "https://auth.parra.io/oauth/device/code";
 
     let device_auth_response: Result<DeviceAuthResponse, Box<dyn Error>> =
         post_form_request(
             device_code_url,
-            vec![("client_id".to_string(), AUTH0_CLIENT_ID.to_string())],
+            vec![
+                ("client_id".to_string(), AUTH0_CLIENT_ID.to_string()),
+                ("scope".to_string(), "offline_access".to_string()),
+            ],
         )
         .await;
 
@@ -75,9 +96,13 @@ async fn perform_normal_authentication() -> Result<Credental, Box<dyn Error>> {
     )
     .await?;
 
-    let stored = persist_credential(&poll_result)?;
+    println!("Authentication successful!");
 
-    Ok(stored)
+    return persist_credential(
+        &poll_result.access_token,
+        poll_result.expires_in,
+        &poll_result.refresh_token,
+    );
 }
 
 fn get_persisted_credential() -> Result<Credental, Box<dyn Error>> {
@@ -91,16 +116,36 @@ fn get_persisted_credential() -> Result<Credental, Box<dyn Error>> {
     return Ok(serde_json::from_str::<Credental>(&data)?);
 }
 
+fn persist_refresh_credential(
+    data: &RefreshResponse,
+    existing_credential: &Credental,
+) -> Result<Credental, Box<dyn Error>> {
+    let next_credential = Credental {
+        token: data.access_token.clone(),
+        refresh_token: existing_credential.refresh_token.clone(),
+        expiry: existing_credential.expiry,
+    };
+
+    return persist_credential(
+        &next_credential.token,
+        data.expires_in,
+        &next_credential.refresh_token,
+    );
+}
+
 fn persist_credential(
-    data: &AuthResponse,
+    access_token: &str,
+    expires_in: u64,
+    refresh_token: &str,
 ) -> Result<Credental, Box<dyn Error>> {
     let now = SystemTime::now();
     let mut expiry = now.duration_since(UNIX_EPOCH)?;
-    expiry = expiry.add(Duration::from_secs(data.expires_in));
+    expiry = expiry.add(Duration::from_secs(expires_in));
 
     let credential = Credental {
-        token: data.access_token.clone(),
+        token: access_token.to_string(),
         expiry: expiry.as_secs(),
+        refresh_token: refresh_token.to_string(),
     };
 
     let serialized = serde_json::to_string(&credential).unwrap();
