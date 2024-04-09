@@ -27,10 +27,22 @@ mkdir -p artifacts
 tar -czf "artifacts/parra-cli-$1.x86_64_apple_darwin.tar.gz" target/x86_64-apple-darwin/release/parra
 tar -czf "artifacts/parra-cli-$1.aarch64_apple_darwin.tar.gz" target/aarch64-apple-darwin/release/parra
 
-echo "Artifacts prepared. Checksums:"
-shasum artifacts/*
+echo "Artifact preparation complete"
 
 git tag "$1"
 git push --tags
 
 gh release create "v$1" ./artifacts/*.tar.gz --generate-notes
+
+echo "Release created on GitHub"
+printf "Update the CLI Formula for the Parra Homebrew tap here: https://github.com/Parra-Inc/homebrew-parra\n\n"
+
+printf "Artifact URLs:\n"
+echo "https://github.com/Parra-Inc/parra-cli/releases/download/v$1/parra-cli-$1.x86_64_apple_darwin.tar.gz"
+echo "https://github.com/Parra-Inc/parra-cli/releases/download/v$1/parra-cli-$1.aarch64_apple_darwin.tar.gz"
+
+printf "\nChecksums:\n"
+shasum artifacts/*
+
+
+printf "\n\n Done!"
