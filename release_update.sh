@@ -42,7 +42,7 @@ echo "https://github.com/Parra-Inc/parra-cli/releases/download/v$1/parra-cli-$1.
 echo "https://github.com/Parra-Inc/parra-cli/releases/download/v$1/parra-cli-$1.aarch64_apple_darwin.tar.gz"
 
 printf "\nChecksums:\n"
-shasum artifacts/*
+shasum artifacts/* --algorithm 256
 
 
 printf "\n\n Done!"
