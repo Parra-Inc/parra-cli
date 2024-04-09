@@ -11,7 +11,6 @@ use slugify::slugify;
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
-use std::io::{self, Write};
 use std::path::Path;
 use std::process::exit;
 use std::sync::mpsc;
@@ -56,27 +55,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (tx_deps, rx_deps) =
         mpsc::channel::<Vec<dependencies::DerivedDependency>>();
-    // let (tx_auth, rx_auth) = mpsc::channel::<types::AuthResponse>();
 
     if requires_dependencies {
-        if missing.contains(&dependencies::DerivedDependency::Xcode) {
-            print!("We need to install a few dependencies, including an Xcode update. You will be prompted to enter your Apple ID and password in order to download it. Proceed? (y/n): ");
+        let confirm_message = if missing
+            .contains(&dependencies::DerivedDependency::Xcode)
+        {
+            "We need to install a few dependencies, including an Xcode update. You will be prompted to enter your Apple ID and password in order to download it. Proceed?"
         } else {
-            print!(
-                "We need to install a few dependencies first. Proceed? (y/n): "
-            );
-        }
+            "We need to install a few dependencies first. Proceed?"
+        };
 
-        io::stdout().flush().unwrap(); // Ensure the prompt is displayed immediately
-
-        // Read the user's input
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
+        let confirmed_install =
+            Confirm::new(confirm_message).with_default(true).prompt()?;
 
         // Trim the input and check if it's an affirmative response
-        if input.trim().eq_ignore_ascii_case("y") {
-            println!("User confirmed action.");
-
+        if confirmed_install {
             dependencies::install_missing_dependencies(
                 tx_deps,
                 desired_xcode_version,
