@@ -29,7 +29,11 @@ tar -czf "artifacts/parra-cli-$1.aarch64_apple_darwin.tar.gz" target/aarch64-app
 
 echo "Artifact preparation complete"
 
+git add --all
+git commit -m "Release v$1"
+
 git tag "$1"
+git push
 git push --tags
 
 gh release create "v$1" ./artifacts/*.tar.gz --generate-notes
