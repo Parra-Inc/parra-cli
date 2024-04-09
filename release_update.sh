@@ -27,6 +27,8 @@ mkdir -p artifacts
 tar -czf "artifacts/parra-cli-$1.x86_64_apple_darwin.tar.gz" target/x86_64-apple-darwin/release/parra
 tar -czf "artifacts/parra-cli-$1.aarch64_apple_darwin.tar.gz" target/aarch64-apple-darwin/release/parra
 
+chmod +x artifacts/*
+
 echo "Artifact preparation complete"
 
 git add --all
