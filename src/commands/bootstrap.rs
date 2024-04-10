@@ -1,6 +1,7 @@
 use crate::types::api::{ApplicationResponse, TenantResponse};
 use crate::types::dependency::XcodeVersion;
 use crate::{api, dependencies, project_generator};
+use convert_case::{Case, Casing};
 use inquire::validator::{MaxLengthValidator, MinLengthValidator, Validation};
 use inquire::{Confirm, InquireError, Select, Text};
 use regex::Regex;
@@ -10,7 +11,18 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;
 use std::process::exit;
-use std::sync::mpsc;
+
+static MIN_XCODE_VERSION: XcodeVersion = XcodeVersion {
+    major: 15,
+    minor: 3,
+    patch: 0,
+};
+
+static DESIRED_XCODE_VERSION: XcodeVersion = XcodeVersion {
+    major: 15,
+    minor: 3,
+    patch: 0,
+};
 
 impl Display for TenantResponse {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -33,24 +45,48 @@ pub async fn execute_bootstrap(
     workspace_id: Option<String>,
     project_path: Option<String>,
 ) -> Result<(), Box<dyn Error>> {
-    let min_xcode_version = XcodeVersion {
-        major: 15,
-        minor: 3,
-        patch: 0,
-    };
+    let tenant = get_tenant(workspace_id).await?;
+    let mut application = get_application(application_id, &tenant).await?;
 
-    let desired_xcode_version = XcodeVersion {
-        major: 15,
-        minor: 3,
-        patch: 0,
-    };
+    // If the app name ends with "App", remove it.
+    if application.name.to_lowercase().ends_with("app") {
+        application.name =
+            application.name.trim_end_matches("app").trim().to_string();
+    }
 
+    let kebab_name = application.name.to_case(Case::Kebab);
+    let relative_path = get_project_path(project_path, &kebab_name);
+
+    let current_dir = env::current_dir()?;
+    let supplied = Path::new(&relative_path);
+    let mut project_path = current_dir.join(supplied);
+
+    println!("Creating project at {}", project_path.display());
+
+    if !project_path.ends_with(&kebab_name) {
+        project_path = project_path.join(&kebab_name);
+    }
+
+    println!("Generating project...");
+
+    project_generator::generator::generate_xcode_project(
+        &current_dir,
+        &project_path,
+        tenant,
+        application,
+    )?;
+
+    println!("🚀 Parra project generated at {}!", relative_path);
+
+    dependencies().await?;
+
+    Ok(())
+}
+
+async fn dependencies() -> Result<(), Box<dyn Error>> {
     let missing =
-        dependencies::check_for_missing_dependencies(min_xcode_version);
+        dependencies::check_for_missing_dependencies(MIN_XCODE_VERSION);
     let requires_dependencies = !missing.is_empty();
-
-    let (tx_deps, rx_deps) =
-        mpsc::channel::<Vec<dependencies::DerivedDependency>>();
 
     if requires_dependencies {
         let confirm_message = if missing
@@ -66,33 +102,12 @@ pub async fn execute_bootstrap(
 
         // Trim the input and check if it's an affirmative response
         if confirmed_install {
-            dependencies::install_missing_dependencies(
-                tx_deps,
-                desired_xcode_version,
-            );
-
-            rx_deps.recv().unwrap();
+            dependencies::install_missing_dependencies(DESIRED_XCODE_VERSION);
         } else {
             println!("Parra bootstrap cancelled. ");
             exit(1)
         }
     }
-
-    let tenant = get_tenant(workspace_id).await?;
-    let application = get_application(application_id, &tenant).await?;
-    let relative_path = get_project_path(project_path);
-
-    let current_dir = env::current_dir()?;
-    let supplied = Path::new(&relative_path);
-    let project_path = current_dir.join(supplied);
-
-    println!("Creating project at: {:?}", project_path);
-
-    project_generator::generator::generate_xcode_project(
-        &project_path,
-        tenant,
-        application,
-    )?;
 
     Ok(())
 }
@@ -118,11 +133,7 @@ async fn get_tenant(
 
     if use_existing {
         let selected_tenant: Result<TenantResponse, InquireError> =
-            Select::new(
-                "Which workspace are you building an app for?",
-                tenants,
-            )
-            .prompt();
+            Select::new("Please select a workspace", tenants).prompt();
 
         return Ok(selected_tenant?);
     } else {
@@ -152,11 +163,7 @@ async fn get_application(
 
     if use_existing {
         let selected_application: Result<ApplicationResponse, InquireError> =
-            Select::new(
-                "Which application are you building an app for?",
-                applications,
-            )
-            .prompt();
+            Select::new("Please select an application", applications).prompt();
 
         match selected_application {
             Ok(application) => return Ok(application),
@@ -167,16 +174,22 @@ async fn get_application(
     }
 }
 
-fn get_project_path(project_path_arg: Option<String>) -> String {
+fn get_project_path(
+    project_path_arg: Option<String>,
+    app_name: &str,
+) -> String {
     if let Some(project_path) = project_path_arg {
         return project_path;
     }
 
+    let default_path = format!("./{}", app_name);
+    let default_message = format!("For example: ~/Desktop/{}", app_name);
+
     let project_path =
         Text::new("Where would you like to create your project?")
-            .with_default("./")
+            .with_default(&default_path)
             .with_validator(MinLengthValidator::new(1))
-            .with_help_message("Provide a relative path to the directory where you would like to create your project. A new directory will be created in this location with the name of your application.")
+            .with_help_message(&default_message)
             .prompt()
             .unwrap();
 

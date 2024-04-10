@@ -12,6 +12,7 @@ use crate::{
 
 pub fn generate_xcode_project(
     path: &PathBuf,
+    project_dir: &PathBuf,
     tenant: TenantResponse,
     application: ApplicationResponse,
 ) -> Result<(), Box<dyn Error>> {
@@ -19,7 +20,6 @@ pub fn generate_xcode_project(
     let camel_name = app_name.to_case(Case::UpperCamel);
     let bundle_id = application.ios.unwrap().bundle_id;
 
-    let project_dir = path.join(app_name.clone());
     let target_dir = project_dir.join(app_name.clone());
 
     if project_dir.exists() {
