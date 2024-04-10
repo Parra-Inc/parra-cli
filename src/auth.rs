@@ -1,6 +1,7 @@
 use crate::types::auth::{
     AuthResponse, Credental, DeviceAuthResponse, RefreshResponse, TokenRequest,
 };
+use inquire::Confirm;
 use serde::de::DeserializeOwned;
 use std::error::Error;
 use std::ops::Add;
@@ -65,6 +66,24 @@ async fn perform_normal_authentication() -> Result<Credental, Box<dyn Error>> {
         .await;
 
     let device_auth = device_auth_response.unwrap();
+
+    // confirm that the user wants to open the browser
+    let confirm_message =
+        format!("We need to confirm your identity in the browser. Press enter to open the browser.");
+    let help_message = format!(
+        "If the browser doesn't open automatically, visit {} and enter the code: {} to confirm your login.",
+        device_auth.verification_uri, device_auth.user_code
+    );
+
+    let confirmed = Confirm::new(&confirm_message)
+        .with_default(true)
+        .with_help_message(&help_message)
+        .prompt()?;
+
+    if !confirmed {
+        return Err("Authentication cancelled".into());
+    }
+
     let result = open::that(device_auth.verification_uri_complete);
 
     if result.is_err() {
