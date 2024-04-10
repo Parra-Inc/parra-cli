@@ -10,12 +10,12 @@ use crate::{
     types::api::{ApplicationResponse, TenantResponse},
 };
 
-pub fn generate_xcode_project(
+pub fn generate_xcode_project<'a>(
     path: &PathBuf,
     project_dir: &PathBuf,
     tenant: TenantResponse,
     application: ApplicationResponse,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<PathBuf, Box<dyn Error>> {
     let app_name = application.name;
     let camel_name = app_name.to_case(Case::UpperCamel);
     let bundle_id = application.ios.unwrap().bundle_id;
@@ -65,9 +65,7 @@ pub fn generate_xcode_project(
 
     install_spm_dependencies(&project_dir)?;
 
-    open_project(&target_dir)?;
-
-    Ok(())
+    Ok(target_dir)
 }
 
 fn create_project_structure(
@@ -192,17 +190,6 @@ fn run_xcodegen(
 fn install_spm_dependencies(path: &PathBuf) -> Result<(), Box<dyn Error>> {
     Command::new("xcodebuild")
         .arg("-resolvePackageDependencies")
-        .current_dir(path)
-        .output()?;
-
-    Ok(())
-}
-
-fn open_project(path: &PathBuf) -> Result<(), Box<dyn Error>> {
-    let full_path = path.to_str().unwrap().to_owned() + ".xcodeproj";
-
-    Command::new("open")
-        .arg(full_path)
         .current_dir(path)
         .output()?;
 

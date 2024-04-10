@@ -1,3 +1,4 @@
+use crate::dependencies::DerivedDependency;
 use crate::types::api::{ApplicationResponse, TenantResponse};
 use crate::types::dependency::XcodeVersion;
 use crate::{api, dependencies, project_generator};
@@ -9,8 +10,8 @@ use slugify::slugify;
 use std::env;
 use std::error::Error;
 use std::fmt::Display;
-use std::path::Path;
-use std::process::exit;
+use std::path::{Path, PathBuf};
+use std::process::{exit, Command};
 
 static MIN_XCODE_VERSION: XcodeVersion = XcodeVersion {
     major: 15,
@@ -61,52 +62,65 @@ pub async fn execute_bootstrap(
     let supplied = Path::new(&relative_path);
     let mut project_path = current_dir.join(supplied);
 
-    println!("Creating project at {}", project_path.display());
-
     if !project_path.ends_with(&kebab_name) {
         project_path = project_path.join(&kebab_name);
     }
 
-    println!("Generating project...");
+    println!("Generating project at {}", relative_path);
 
-    project_generator::generator::generate_xcode_project(
+    let xcode_project = project_generator::generator::generate_xcode_project(
         &current_dir,
         &project_path,
         tenant,
         application,
     )?;
 
-    println!("🚀 Parra project generated at {}!", relative_path);
+    let xcode_target_dir = &xcode_project;
 
-    dependencies().await?;
+    println!("Parra project generated at {}!", relative_path);
+
+    let missing = missing_dependencies();
+    // If all dependencies are met, open the project. Otherwise, prompt the user to install them,
+    // and then open the project on completion.
+    if missing.is_empty() {
+        open_project(xcode_target_dir)?;
+    } else {
+        dependencies(missing).await?;
+
+        open_project(xcode_target_dir)?;
+    }
 
     Ok(())
 }
 
-async fn dependencies() -> Result<(), Box<dyn Error>> {
-    let missing =
-        dependencies::check_for_missing_dependencies(MIN_XCODE_VERSION);
-    let requires_dependencies = !missing.is_empty();
+fn missing_dependencies() -> Vec<DerivedDependency> {
+    dependencies::check_for_missing_dependencies(MIN_XCODE_VERSION)
+}
 
-    if requires_dependencies {
-        let confirm_message = if missing
-            .contains(&dependencies::DerivedDependency::Xcode)
-        {
-            "We need to install a few dependencies, including an Xcode update. You will be prompted to enter your Apple ID and password in order to download it. Proceed?"
-        } else {
-            "We need to install a few dependencies first. Proceed?"
-        };
+async fn dependencies(
+    missing: Vec<DerivedDependency>,
+) -> Result<(), Box<dyn Error>> {
+    if missing.is_empty() {
+        return Ok(());
+    }
 
-        let confirmed_install =
-            Confirm::new(confirm_message).with_default(true).prompt()?;
+    let confirm_message = if missing
+        .contains(&dependencies::DerivedDependency::Xcode)
+    {
+        "We need to install a few dependencies, including an Xcode update. You will be prompted to enter your Apple ID and password in order to download it. Proceed?"
+    } else {
+        "We need to install a few dependencies first. Proceed?"
+    };
 
-        // Trim the input and check if it's an affirmative response
-        if confirmed_install {
-            dependencies::install_missing_dependencies(DESIRED_XCODE_VERSION);
-        } else {
-            println!("Parra bootstrap cancelled. ");
-            exit(1)
-        }
+    let confirmed_install =
+        Confirm::new(confirm_message).with_default(true).prompt()?;
+
+    // Trim the input and check if it's an affirmative response
+    if confirmed_install {
+        dependencies::install_missing_dependencies(DESIRED_XCODE_VERSION);
+    } else {
+        println!("Parra bootstrap cancelled. ");
+        exit(1)
     }
 
     Ok(())
@@ -239,4 +253,17 @@ async fn create_new_application(
             .await?;
 
     return Ok(new_application);
+}
+
+fn open_project(path: &PathBuf) -> Result<(), Box<dyn Error>> {
+    println!("🚀 Launching project! 🚀 ");
+
+    let full_path = path.to_str().unwrap().to_owned() + ".xcodeproj";
+
+    Command::new("open")
+        .arg(full_path)
+        .current_dir(path)
+        .output()?;
+
+    Ok(())
 }
