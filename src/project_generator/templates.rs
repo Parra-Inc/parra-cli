@@ -20,7 +20,7 @@ targets:
     deploymentTarget: "17.0"
     sources: [{{ app.name }}]
     entitlements:
-      path: App/App.entitlements
+      path: {{ app.name }}/{{ app.name }}.entitlements
       properties:
         com.apple.developer.aps-environment: development
     settings:
