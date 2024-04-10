@@ -1,30 +1,18 @@
 use crate::types::dependency::XcodeVersion;
 use semver::{Version, VersionReq};
+use std::process::Command;
 use std::process::Stdio;
-use std::{process::Command, sync::mpsc::Sender};
 
 #[derive(Debug, PartialEq)]
 pub enum DerivedDependency {
     Xcode,
 }
 
-// Brew:
-// xcodes, aria2, xcodegen
-
-// Need to get any information we will need from the user up front to install any deps
-// Login for Xcodes, sudo password, etc.
-// Dependencies then install in the background and the auth flow commences.
-
 /// Primary dependencies such as xcodes, xcodegen, aria2, etc. being present will be enforced
 /// by listing them as dependencies of the Homebrew formula. This function will check
 /// derived dependencies such as Xcode versions.
-pub fn install_missing_dependencies(
-    tx: Sender<Vec<DerivedDependency>>,
-    desired_xcode_version: XcodeVersion,
-) {
+pub fn install_missing_dependencies(desired_xcode_version: XcodeVersion) {
     install_xcode(desired_xcode_version);
-
-    let _ = tx.send(Vec::<DerivedDependency>::new());
 }
 
 pub fn check_for_missing_dependencies(
