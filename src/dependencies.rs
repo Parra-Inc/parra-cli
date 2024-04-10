@@ -45,11 +45,10 @@ pub fn check_for_missing_dependencies(
 }
 
 fn check_xcode_version(min_version: XcodeVersion) -> bool {
-    let output = Command::new("xcodes")
-        .arg("installed")
-        .arg("--no-color")
+    let output = Command::new("xcodebuild")
+        .arg("-version")
         .output()
-        .expect("Failed to execute command");
+        .expect("Failed to execute xcodebuild -version");
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -73,15 +72,19 @@ fn check_xcode_version(min_version: XcodeVersion) -> bool {
 
     for line in stdout.lines() {
         // Attempt to extract the version number from the beginning of the line
-        if let Some(version_str) = line.split_whitespace().next() {
-            let full_version_str = ensure_full_semver(version_str);
+        let components: Vec<&str> = line.split_whitespace().collect();
+        let first = components.first();
+        let last = components.last();
 
-            // Parse the version string into a `Version`
-            if let Ok(version) = Version::parse(&full_version_str) {
-                // Check if the version is greater than or equal to the minimum version
-                if min_version_req.matches(&version) {
-                    println!("Found installed Xcode version: {}", version);
-                    return true;
+        if let (Some(first), Some(last)) = (first, last) {
+            if first == &"Xcode" {
+                let version_str = ensure_full_semver(last);
+
+                if let Ok(version) = Version::parse(&version_str) {
+                    if min_version_req.matches(&version) {
+                        println!("Found installed Xcode version: {}", version);
+                        return true;
+                    }
                 }
             }
         }
