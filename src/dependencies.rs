@@ -2,16 +2,20 @@ use crate::types::dependency::XcodeVersion;
 use semver::{Version, VersionReq};
 use std::process::Command;
 use std::process::Stdio;
+use std::vec;
 
 #[derive(Debug, PartialEq)]
 pub enum DerivedDependency {
     Xcode,
 }
 
-/// Primary dependencies such as xcodes, xcodegen, aria2, etc. being present will be enforced
-/// by listing them as dependencies of the Homebrew formula. This function will check
-/// derived dependencies such as Xcode versions.
+/// xcodegen is expected to be installed on the system by homebrew since it is a
+/// project dependency. Other brew dependencies like xcodes and aria2 are installed
+/// manually at this point since they are not always used.
 pub fn install_missing_dependencies(desired_xcode_version: XcodeVersion) {
+    println!("Installing missing dependencies...");
+
+    install_brew_dependencies();
     install_xcode(desired_xcode_version);
 }
 
@@ -19,8 +23,6 @@ pub fn check_for_missing_dependencies(
     min_xcode_version: XcodeVersion,
 ) -> Vec<DerivedDependency> {
     println!("Checking for missing dependencies");
-
-    update_xcodes_list();
 
     let mut missing_deps = Vec::<DerivedDependency>::new();
 
@@ -35,13 +37,11 @@ pub fn check_for_missing_dependencies(
 fn check_xcode_version(min_version: XcodeVersion) -> bool {
     let output = Command::new("xcodebuild")
         .arg("-version")
+        .stderr(Stdio::null())
         .output()
         .expect("Failed to execute xcodebuild -version");
 
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        eprintln!("Command failed. Error:\n{}", stderr);
-
         return false;
     }
 
@@ -83,11 +83,14 @@ fn check_xcode_version(min_version: XcodeVersion) -> bool {
     return false;
 }
 
-fn update_xcodes_list() {
-    println!("Updating list of available Xcode versions");
+fn install_brew_dependencies() {
+    let dependencies = vec!["xcodes", "aria2"];
 
-    let output = Command::new("xcodes")
-        .arg("update")
+    let output = Command::new("brew")
+        .env("HOMEBREW_NO_INSTALL_UPGRADE", "1")
+        .env("HOMEBREW_NO_AUTO_UPDATE", "1")
+        .arg("install")
+        .args(dependencies)
         .output()
         .expect("Failed to execute command");
 

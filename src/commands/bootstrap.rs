@@ -41,6 +41,12 @@ impl Display for ApplicationResponse {
     }
 }
 
+impl Display for XcodeVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
+    }
+}
+
 pub async fn execute_bootstrap(
     application_id: Option<String>,
     workspace_id: Option<String>,
@@ -119,7 +125,8 @@ async fn dependencies(
     if confirmed_install {
         dependencies::install_missing_dependencies(DESIRED_XCODE_VERSION);
     } else {
-        println!("Parra bootstrap cancelled. ");
+        println!("Please install Xcode version {} or later before opening your new project.", MIN_XCODE_VERSION);
+
         exit(1)
     }
 
