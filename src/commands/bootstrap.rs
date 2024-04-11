@@ -7,11 +7,11 @@ use inquire::validator::{MaxLengthValidator, MinLengthValidator, Validation};
 use inquire::{Confirm, InquireError, Select, Text};
 use regex::Regex;
 use slugify::slugify;
-use std::env;
 use std::error::Error;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
+use std::str::FromStr;
 
 static MIN_XCODE_VERSION: XcodeVersion = XcodeVersion {
     major: 15,
@@ -64,26 +64,26 @@ pub async fn execute_bootstrap(
     let kebab_name = application.name.to_case(Case::Kebab);
     let relative_path = get_project_path(project_path, &kebab_name);
 
-    let current_dir = env::current_dir()?;
-    let supplied = Path::new(&relative_path);
-    let mut project_path = current_dir.join(supplied);
-
+    let mut project_path = PathBuf::from_str(&relative_path)?;
     if !project_path.ends_with(&kebab_name) {
-        project_path = project_path.join(&kebab_name);
+        project_path.push(&kebab_name);
     }
+    let expanded_path = expand_tilde(&project_path).unwrap();
 
-    println!("Generating project at {}", relative_path);
+    println!("Generating project...");
 
     let xcode_project = project_generator::generator::generate_xcode_project(
-        &current_dir,
-        &project_path,
+        &expanded_path,
         tenant,
         application,
     )?;
 
     let xcode_target_dir = &xcode_project;
 
-    println!("Parra project generated at {}!", relative_path);
+    println!(
+        "Parra project generated at {}!",
+        expanded_path.to_str().unwrap()
+    );
 
     let missing = missing_dependencies();
     // If all dependencies are met, open the project. Otherwise, prompt the user to install them,
@@ -273,4 +273,29 @@ fn open_project(path: &PathBuf) -> Result<(), Box<dyn Error>> {
         .output()?;
 
     Ok(())
+}
+
+extern crate dirs; // 1.0.4
+
+fn expand_tilde<P: AsRef<Path>>(path_user_input: P) -> Option<PathBuf> {
+    let p = path_user_input.as_ref();
+
+    if !p.starts_with("~") {
+        return Some(p.to_path_buf());
+    }
+
+    if p == Path::new("~") {
+        return dirs::home_dir();
+    }
+
+    dirs::home_dir().map(|mut h| {
+        if h == Path::new("/") {
+            // Corner case: `h` root directory;
+            // don't prepend extra `/`, just drop the tilde.
+            p.strip_prefix("~").unwrap().to_path_buf()
+        } else {
+            h.push(p.strip_prefix("~/").unwrap());
+            h
+        }
+    })
 }

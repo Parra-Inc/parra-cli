@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{exit, Command};
 use std::{error::Error, fs};
 
@@ -11,7 +11,6 @@ use crate::{
 };
 
 pub fn generate_xcode_project<'a>(
-    path: &PathBuf,
     project_dir: &PathBuf,
     tenant: TenantResponse,
     application: ApplicationResponse,
@@ -61,7 +60,7 @@ pub fn generate_xcode_project<'a>(
     )
     .unwrap();
 
-    run_xcodegen(path, &project_dir, &project_yaml)?;
+    run_xcodegen(&project_dir, &project_yaml)?;
 
     install_spm_dependencies(&project_dir)?;
 
@@ -153,15 +152,15 @@ fn create_asset_catalog(
 }
 
 fn run_xcodegen(
-    path: &PathBuf,
     project_path: &PathBuf,
     template: &str,
 ) -> Result<(), Box<dyn Error>> {
-    fs::write(path.join("project.yml"), template)?;
+    let tmp_project_yaml_path = Path::new("/tmp/parra_project.yml");
+    fs::write(tmp_project_yaml_path, template)?;
 
     let result = Command::new("xcodegen")
         .arg("--spec")
-        .arg(path.join("project.yml"))
+        .arg(tmp_project_yaml_path.to_str().unwrap())
         .arg("--project")
         .arg(project_path.to_str().unwrap().to_owned())
         .arg("--project-root")
@@ -171,17 +170,17 @@ fn run_xcodegen(
     match result {
         Ok(output) => {
             if output.status.success() {
-                fs::remove_file(path.join("project.yml"))?;
+                fs::remove_file(tmp_project_yaml_path)?;
 
                 return Ok(());
             } else {
                 let error = String::from_utf8_lossy(&output.stderr);
-                eprintln!("Error: {}", error);
+                eprintln!("Error  executing command: {}", error);
                 exit(1);
             }
         }
         Err(error) => {
-            eprintln!("Error: {}", error);
+            eprintln!("Error generating project: {}", error);
             exit(1);
         }
     }

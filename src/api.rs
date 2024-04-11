@@ -178,7 +178,7 @@ async fn perform_request_with_body<T: DeserializeOwned, U: Serialize>(
 
     if !response.status().is_success() {
         let body = response.text().await?;
-        return Err(format!("Error: {}", body).into());
+        return Err(format!("Error response received: {}", body).into());
     }
 
     let body = response.text().await?;
