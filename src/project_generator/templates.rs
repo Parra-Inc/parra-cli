@@ -2,6 +2,8 @@
 /// having a bunch of files in a templates directory to simplify packaging a
 /// standalone binary.
 ///
+/// https://github.com/yonaskolb/XcodeGen/tree/master
+///
 
 pub fn get_project_yaml_template() -> String {
     return r#"
@@ -23,19 +25,23 @@ targets:
       path: {{ app.name }}/{{ app.name }}.entitlements
       properties:
         com.apple.developer.aps-environment: development
+    info:
+      path: {{ app.name }}/Info.plist
+      properties:
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown]
+        UILaunchScreen_Generation: YES
+        UIApplicationSceneManifest_Generation: YES
+        UIApplicationSupportsIndirectInputEvents: YES
+        ITSAppUsesNonExemptEncryption: NO
+        NSCameraUsageDescription: "{{ app.name }} requires access to the camera to take photos."
     settings:
       base:
-        GENERATE_INFOPLIST_FILE: YES
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
         PRODUCT_BUNDLE_IDENTIFIER: {{ app.bundle_id }}
         DEVELOPMENT_ASSET_PATHS: "\"{{ app.name }}/Preview Content\""
-        INFOPLIST_KEY_UILaunchScreen_Generation: YES
-        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
-        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait"
-        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
     dependencies:
       - package: Parra
 
