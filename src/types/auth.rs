@@ -22,7 +22,6 @@ pub struct RefreshResponse {
     pub scope: String,
     pub expires_in: u64,
     pub token_type: String,
-    pub id_token: String,
 }
 
 #[derive(Debug, Deserialize, Clone, Serialize)]
