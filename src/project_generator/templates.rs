@@ -14,17 +14,13 @@ options:
   createIntermediateGroups: true
   generateEmptyDirectories: true
   deploymentTarget:
-    iOS: "17.0"
+    iOS: {{ app.deployment_target }}
 targets:
   {{ app.name }}:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: {{ app.deployment_target }}
     sources: [{{ app.name }}]
-    entitlements:
-      path: {{ app.name }}/{{ app.name }}.entitlements
-      properties:
-        com.apple.developer.aps-environment: development
     info:
       path: {{ app.name }}/Info.plist
       properties:
@@ -42,6 +38,11 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         PRODUCT_BUNDLE_IDENTIFIER: {{ app.bundle_id }}
         DEVELOPMENT_ASSET_PATHS: "\"{{ app.name }}/Preview Content\""
+      configs:
+        debug:
+          CODE_SIGN_ENTITLEMENTS: {{ app.name }}/Entitlements-debug.entitlements
+        release:
+          CODE_SIGN_ENTITLEMENTS: {{ app.name }}/Entitlements-release.entitlements
     dependencies:
       - package: Parra
 
@@ -50,7 +51,7 @@ settings:
   base:
     SWIFT_VERSION: 5.9
     MARKETING_VERSION: 1.0.0
-    CURRENT_PROJECT_VERSION: 1    
+    CURRENT_PROJECT_VERSION: 1
   debug:
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGNING_REQUIRED: NO
@@ -61,7 +62,7 @@ settings:
 packages:
   Parra:
     url: https://github.com/Parra-Inc/parra-ios-sdk
-    minorVersion: 0.1.3
+    minorVersion: 0.1.6
 
 "#
     .to_string();
@@ -83,21 +84,41 @@ import SwiftUI
 final class {{ app.camel_name }}App: ParraApp<ParraAppDelegate, ParraSceneDelegate> {
     required init() {
         super.init()
-
         configureParra(
-            authProvider: .default(
-                workspaceId: "{{ tenant.id }}",
-                applicationId: "{{ app.id }}",
-                authProvider: {
-                    fatalError("You must implement your own authentication provider")
-                }
-            ),
+            workspaceId: "{{ tenant.id }}",
+            applicationId: "{{ app.id }}",
             appContent: {
-                ContentView()
+                ParraRequiredAuthView(
+                    authenticatedContent: { _ in
+                        ContentView()
+                    },
+                    unauthenticatedContent: { _ in
+                        ParraDefaultAuthenticationFlowView(
+                            flowConfig: .default
+                        )
+                    }
+                )
             }
         )
     }
 }
+"#
+    .to_string();
+}
+
+pub fn get_entitlements_xml() -> String {
+    return r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>{{ entitlements.aps_environment }}</string>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+    {{ entitlements.associated_domains }}
+	</array>
+</dict>
+</plist>
 "#
     .to_string();
 }

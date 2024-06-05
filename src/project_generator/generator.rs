@@ -45,6 +45,7 @@ pub fn generate_xcode_project<'a>(
             "name": app_name,
             "camel_name": camel_name,
             "bundle_id": bundle_id,
+            "deployment_target": "17.0",
         },
         "tenant": {
             "id": tenant.id,
@@ -52,7 +53,7 @@ pub fn generate_xcode_project<'a>(
         }
     });
 
-    create_project_files(&target_dir, &camel_name, &globals)?;
+    create_project_files(tenant, &target_dir, &camel_name, &globals)?;
 
     let project_yaml = renderer::render_template(
         &templates::get_project_yaml_template(),
@@ -86,6 +87,7 @@ fn create_project_structure(
 }
 
 fn create_project_files(
+    tenant: TenantResponse,
     target_path: &PathBuf,
     camel_app_name: &str,
     globals: &liquid::Object,
@@ -102,6 +104,7 @@ fn create_project_files(
     )
     .unwrap();
 
+    create_entitlements_files(tenant, &target_path)?;
     create_asset_catalog(&target_path, &globals)?;
 
     let preview_assets_json =
@@ -116,6 +119,79 @@ fn create_project_files(
     fs::write(app_path, app_swift_yaml)?;
     fs::write(content_view_path, app_content_view_yaml)?;
     fs::write(preview_assets_path, preview_assets_json)?;
+
+    Ok(())
+}
+
+fn create_entitlements_files(
+    tenant: TenantResponse,
+    target_path: &PathBuf,
+) -> Result<(), Box<dyn Error>> {
+    // Put the domains in order by priority that they appear in the Apple entitlements
+    // file. This is done by looking at the order of the domain type enum cases.
+    let mut domains = tenant.domains;
+    domains.sort_by_key(|domain| domain.domain_type);
+
+    let debug_web_credential_hosts: Vec<String> = domains
+        .iter()
+        .map(|domain| {
+            return format!(
+                "<string>webcredentials:{}?mode=developer</string>",
+                domain.host
+            );
+        })
+        .collect();
+
+    let release_web_credential_hosts: Vec<String> = domains
+        .iter()
+        .map(|domain| {
+            return format!("<string>webcredentials:{}</string>", domain.host);
+        })
+        .collect();
+
+    let debug_params = liquid::object!({
+        "entitlements": {
+            "aps_environment": "development",
+            "associated_domains": debug_web_credential_hosts.join("\n"),
+        },
+    });
+
+    let release_params = liquid::object!({
+        "entitlements": {
+            "aps_environment": "production",
+            "associated_domains": release_web_credential_hosts.join("\n"),
+        },
+    });
+
+    // development,
+    // <string>webcredentials:parra-public-demo.parra.io?mode=developer</string>
+    // <string>webcredentials:tenant-201cbcf0-b5d6-4079-9e4d-177ae04cc9f4.parra.io?mode=developer</string>
+    // properties:
+    //     com.apple.developer.aps-environment: development
+    //     com.apple.developer.associated-domains: {{ app.debug_associated_domains }}
+    // properties:
+    //     com.apple.developer.aps-environment: development
+    //     com.apple.developer.associated-domains: {{ app.release_associated_domains }}
+
+    let debug_entitlements_yaml = renderer::render_template(
+        &templates::get_entitlements_xml(),
+        &debug_params,
+    )
+    .unwrap();
+
+    let release_entitlements_yaml = renderer::render_template(
+        &templates::get_entitlements_xml(),
+        &release_params,
+    )
+    .unwrap();
+
+    let debug_entitlements_path =
+        target_path.join("Entitlements-debug.entitlements");
+    let release_entitlements_path =
+        target_path.join("Entitlements-release.entitlements");
+
+    fs::write(debug_entitlements_path, debug_entitlements_yaml)?;
+    fs::write(release_entitlements_path, release_entitlements_yaml)?;
 
     Ok(())
 }
