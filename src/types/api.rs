@@ -27,9 +27,46 @@ pub struct TenantRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct Size {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TenantLogo {
+    pub id: String,
+    pub url: String,
+    pub size: Size,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub enum TenantDomainType {
+    #[serde(rename = "managed")]
+    Managed,
+    #[serde(rename = "external")]
+    External,
+    #[serde(rename = "subdomain")]
+    Subdomain,
+    #[serde(rename = "fallback")]
+    Fallback,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TenantDomain {
+    pub id: String,
+    pub url: String,
+    pub name: String,
+    #[serde(rename = "type")]
+    pub domain_type: TenantDomainType,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TenantResponse {
     pub id: String,
     pub name: String,
+    pub subdomain: Option<String>,
+    pub logo: Option<TenantLogo>,
+    pub domains: Vec<TenantDomain>,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
