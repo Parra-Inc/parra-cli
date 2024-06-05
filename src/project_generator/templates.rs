@@ -38,6 +38,9 @@ targets:
         CODE_SIGNING_ALLOWED: NO
         PRODUCT_BUNDLE_IDENTIFIER: {{ app.bundle_id }}
         DEVELOPMENT_ASSET_PATHS: "\"{{ app.name }}/Preview Content\""
+        SWIFT_VERSION: 5.9
+        MARKETING_VERSION: 1.0.0
+        CURRENT_PROJECT_VERSION: 1
       configs:
         debug:
           CODE_SIGN_ENTITLEMENTS: {{ app.name }}/Entitlements-debug.entitlements
@@ -62,7 +65,7 @@ settings:
 packages:
   Parra:
     url: https://github.com/Parra-Inc/parra-ios-sdk
-    minorVersion: 0.1.6
+    minorVersion: 0.1.7
 
 "#
     .to_string();

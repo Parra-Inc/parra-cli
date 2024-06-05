@@ -1,6 +1,7 @@
 # Developing the Parra CLI
 
 ### Prerequisites
+
 1. Install [Homebrew](https://brew.sh/).
 2. Install Homebrew development dependencies. `brew install xcodes aria2 xcodegen gh`. This includes tools that are used by the script itself, and `gh` is used to create GitHub when running the `release_update.sh` script.
 3. Install [Rust](https://www.rust-lang.org/tools/install).
