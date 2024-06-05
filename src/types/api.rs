@@ -39,7 +39,9 @@ pub struct TenantLogo {
     pub size: Size,
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(
+    Debug, Deserialize, Serialize, Clone, PartialEq, Eq, PartialOrd, Ord, Copy,
+)]
 pub enum TenantDomainType {
     #[serde(rename = "managed")]
     Managed,
@@ -55,6 +57,7 @@ pub enum TenantDomainType {
 pub struct TenantDomain {
     pub id: String,
     pub url: String,
+    pub host: String,
     pub name: String,
     #[serde(rename = "type")]
     pub domain_type: TenantDomainType,
