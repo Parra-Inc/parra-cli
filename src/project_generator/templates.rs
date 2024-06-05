@@ -41,6 +41,7 @@ targets:
         SWIFT_VERSION: 5.9
         MARKETING_VERSION: 1.0.0
         CURRENT_PROJECT_VERSION: 1
+        SWIFT_ENABLE_BARE_SLASH_REGEX: YES
       configs:
         debug:
           CODE_SIGN_ENTITLEMENTS: {{ app.name }}/Entitlements-debug.entitlements
@@ -55,6 +56,7 @@ settings:
     SWIFT_VERSION: 5.9
     MARKETING_VERSION: 1.0.0
     CURRENT_PROJECT_VERSION: 1
+    SWIFT_ENABLE_BARE_SLASH_REGEX: YES
   debug:
     CODE_SIGN_IDENTITY: "-"
     CODE_SIGNING_REQUIRED: NO
