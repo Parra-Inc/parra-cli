@@ -26,7 +26,8 @@ targets:
       properties:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown]
-        UILaunchScreen_Generation: YES
+        UILaunchScreen:
+          UIImageRespectsSafeAreaInsets: NO
         UIApplicationSceneManifest_Generation: YES
         UIApplicationSupportsIndirectInputEvents: YES
         ITSAppUsesNonExemptEncryption: NO
