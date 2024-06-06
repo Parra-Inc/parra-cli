@@ -28,7 +28,6 @@ targets:
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight, UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown]
         UILaunchScreen:
           UIImageRespectsSafeAreaInsets: NO
-        UIApplicationSceneManifest_Generation: YES
         UIApplicationSupportsIndirectInputEvents: YES
         ITSAppUsesNonExemptEncryption: NO
         NSCameraUsageDescription: "{{ app.name }} requires access to the camera to take photos."
