@@ -67,7 +67,7 @@ settings:
 packages:
   Parra:
     url: https://github.com/Parra-Inc/parra-ios-sdk
-    minorVersion: 0.1.10
+    minorVersion: 0.1.15
 
 "#
     .to_string();
